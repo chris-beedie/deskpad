@@ -3,9 +3,13 @@
 #include "clock_key.h"
 #include "config.h"
 #include "ddc.h"
+#include "http_server.h"
 #include "key_anim.h"
 #include "live_key.h"
+#include "monitor_render.h"
+#include "network.h"
 #include "esp_log.h"
+#include "esp_ota_ops.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -95,15 +99,36 @@ static void on_akp_event(const akp03e_event_t *ev, void *user)
     }
 }
 
+// Tell the bootloader the current image works. Required when
+// CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y — otherwise the bootloader
+// rolls back to the previous slot on the next reset.
+static void ota_mark_self_valid(void)
+{
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    esp_ota_img_states_t state;
+    if (esp_ota_get_state_partition(running, &state) != ESP_OK) return;
+    if (state == ESP_OTA_IMG_PENDING_VERIFY) {
+        ESP_LOGI(TAG, "OTA image pending verify — marking valid");
+        esp_ota_mark_app_valid_cancel_rollback();
+    }
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "boot");
+    ota_mark_self_valid();
 
     TaskHandle_t self = xTaskGetCurrentTaskHandle();
     xTaskCreatePinnedToCore(usb_host_lib_task, "usb_lib", 4096, self, 5, NULL, 0);
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     ESP_ERROR_CHECK(config_init());  // loads NVS-backed bindings (stamps defaults on first boot)
+
+    // AKP USB client must register BEFORE network_init runs. network_init
+    // takes ~2.5 s for PHY bring-up; if it ran first, the AKP would
+    // enumerate on the USB host during that gap with no registered client
+    // listening, the NEW_DEV event would be discarded, and the device
+    // would silently stay un-enumerated until the user replugged it.
     ddc_init();   // failures are logged inside; missing monitors don't block boot
     ESP_ERROR_CHECK(key_anim_init());
     ESP_ERROR_CHECK(actions_init());
@@ -112,8 +137,15 @@ void app_main(void)
     lv_tick_set_cb(lv_tick_ms);
     ESP_ERROR_CHECK(live_key_init());
     ESP_ERROR_CHECK(clock_key_init());
+    ESP_ERROR_CHECK(monitor_render_init());   // binds REND_MONITOR slots
 
     ESP_ERROR_CHECK(akp03e_init(on_akp_event, NULL));
+
+    // Now safe to bring up wired networking — USB enumeration has either
+    // already landed (CONNECTED callback fired) or will land on a client
+    // that's listening.
+    ESP_ERROR_CHECK(network_init()); // wired Ethernet + mDNS; non-blocking
+    ESP_ERROR_CHECK(http_server_start());
 
     ESP_LOGI(TAG, "ready, waiting for device");
 }

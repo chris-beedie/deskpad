@@ -6,3 +6,4 @@
 dependencies:
   idf: ">=5.5,<6.0"
   lvgl/lvgl: "^9.0.0"
+  espressif/mdns: "^1.2.0"

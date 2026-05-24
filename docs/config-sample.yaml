@@ -1,0 +1,320 @@
+# deskpad — sample config (design preview)
+#
+# This is a target schema for Phases 3-5; the live Phase-1 schema in NVS is
+# much simpler (action_t enum names per page/slot). Use this file to react
+# to the proposed structure — what's right, what's missing, what should be
+# named differently.
+#
+# Storage on the device is intended to remain JSON (cheap to parse, native
+# to the SPA). YAML is the human-readable form for editing / import-export
+# in the Web UI.
+#
+# HID chord syntax: a string like "ctrl+shift+m". Modifier aliases:
+# `ctrl = lctrl`, `shift = lshift`, `alt = lalt`, `cmd/win/meta = lwin`.
+# Right-hand variants are explicit (`rctrl`, `rshift`, etc.) for the
+# rare case you need them.
+#
+# Renderer/binding coupling: each slot may declare a top-level `entity:`.
+# When present, the renderer and binding can derive HA-standard MQTT topics
+# and service targets from it without duplicating the entity ID. Any
+# per-field override (e.g. an explicit `state_topic` in renderer config, or
+# an explicit `entity` in the binding) wins over the derived value. Slots
+# that aren't HA-bound (kvm_toggle, hid, monitor) leave `entity:` unset.
+
+schema: 2
+
+# ---------------------------------------------------------------------------
+# Device-level facts that today live as #defines in ddc.h. Moving them into
+# config makes deskpad re-configurable for a different monitor or dock
+# arrangement without a reflash.
+
+device:
+  hostname: deskpad
+
+  kvm:
+    # The U38 is the actual KVM. DDC is reached via its unused HDMI port.
+    monitor_a:
+      model: Dell U3823DW
+      ddc_bus: A
+      inputs:
+        pc1: 0x0F   # DP   — Dock A — Primary Work (fixed)
+        pc2: 0x1B   # USB-C — Dock B — Personal or Secondary Work (cable swap)
+
+    # Secondary monitor. DDC is tapped on its HDMI-1 pass-through.
+    monitor_b:
+      model: Dell U2419H
+      ddc_bus: B
+      inputs:
+        pc1: 0x11   # HDMI 1
+        pc2: 0x0F   # DP
+
+# ---------------------------------------------------------------------------
+# Non-sensitive HA settings. Sensitive credentials (MQTT host / port / user /
+# password, and any future host-agent tokens or API keys) are entered in the
+# Web UI's "Credentials" page and stored in a separate NVS key — never in
+# this file, never in any file. They are written via /api/credentials and
+# GETs return the shape with secret values masked.
+
+network:
+  mqtt:
+    ha_discovery_prefix: homeassistant
+    base_topic: deskpad           # publishes deskpad/host/active, deskpad/event/press/* etc.
+
+# ---------------------------------------------------------------------------
+# Pages — exactly three. Each Page has six Slots (0..5). Side keys jump
+# directly to a Page (side 0 -> page 0, etc.) and are not configurable.
+
+pages:
+
+  # ─── Page 0 — globals ─────────────────────────────────────────────────
+  - name: globals
+    slots:
+
+      # KVM-select (jumps directly to a named Host). Two "monitor"
+      # renderers next to each other give a visual "Work vs Home" diptych
+      # — only the one matching the current Active Host lights up. The
+      # convenience `kvm_toggle` binding exists as sugar for
+      # `kvm_select` of the not-currently-active host (defined below).
+      - slot: 0
+        scope: global
+        display: { renderer: monitor, config: { label: Work, lit_when: PC1 } }
+        binding: { type: kvm_select, target: PC1 }
+
+      - slot: 1
+        scope: global
+        display: { renderer: monitor, config: { label: Home, lit_when: PC2 } }
+        binding: { type: kvm_select, target: PC2 }
+
+      # HA light toggle. Slot-level `entity` derives both the state_topic
+      # (for the bulb renderer's MQTT subscription) and the binding's
+      # service target. Renderer/binding configs only carry what isn't
+      # derivable — here, just the label.
+      - slot: 2
+        scope: global
+        entity: light.office
+        display: { renderer: bulb, config: { label: Office } }
+        binding: { type: ha, service: light.toggle }
+
+      - slot: 3
+        scope: global
+        entity: light.desk
+        display: { renderer: bulb, config: { label: Desk } }
+        binding: { type: ha, service: light.toggle }
+
+      # Thermostat — slot-level `entity` is the climate entity (used by
+      # the binding); the renderer needs three explicit topics because
+      # it's looking at sensor + climate + timer that don't all share
+      # one HA entity, so the hybrid model lets us be explicit per field.
+      - slot: 4
+        scope: global
+        entity: climate.living
+        display:
+          renderer: thermostat
+          config:
+            label: Living
+            current_topic: homeassistant/sensor/living_temp/state
+            target_topic:  homeassistant/climate/living/target
+            boost_remaining_topic: homeassistant/timer/heating_boost/finishes_at
+        binding: { type: ha, service: script.heating_boost_2h }
+
+      # Pure display, no action.
+      - slot: 5
+        scope: global
+        display: { renderer: clock }
+        binding: { type: none }
+
+  # ─── Page 1 — Work (host-scoped) ──────────────────────────────────────
+  - name: work
+    slots:
+
+      - slot: 0
+        scope: host:PC1                         # only renders when PC1 active
+        display:
+          renderer: static_jpeg
+          config: { image: outlook.jpg, label: Outlook }
+        binding:
+          type: hid
+          chord: 'ctrl+1'                       # Outlook focus chord
+
+      - slot: 1
+        scope: host:PC1
+        display:
+          renderer: static_jpeg
+          config: { image: teams.jpg, label: Teams mute }
+        binding:
+          type: hid
+          chord: 'ctrl+shift+m'
+
+      - slot: 2
+        scope: host:PC1
+        display:
+          renderer: static_jpeg
+          config: { image: calendar.jpg, label: Calendar }
+        binding:
+          type: hid
+          chord: 'win+c'
+
+      # Globals can appear on host-scoped pages too — useful for "always
+      # show the clock" / "always show the heating boost button."
+      - slot: 3
+        scope: global
+        display: { renderer: clock }
+        binding: { type: none }
+
+      - slot: 4
+        scope: global
+        display:
+          renderer: text_value
+          config:
+            label: CPU
+            topic: deskpad/host/PC1/cpu_pct     # host-agent publishes this (Phase 9+)
+            unit: '%'
+        binding: { type: none }
+
+      # System keystroke — Windows settings.
+      - slot: 5
+        scope: global
+        display:
+          renderer: static_jpeg
+          config: { image: settings.jpg, label: Settings }
+        binding:
+          type: hid
+          chord: 'win+i'
+
+  # ─── Page 2 — Personal (host-scoped) ──────────────────────────────────
+  - name: personal
+    slots:
+
+      - slot: 0
+        scope: host:PC2
+        display:
+          renderer: static_jpeg
+          config: { image: spotify.jpg, label: Play / Pause }
+        binding:
+          type: hid
+          consumer: PLAY_PAUSE                  # consumer-control flavour of hid
+
+      - slot: 1
+        scope: host:PC2
+        display: { renderer: static_jpeg, config: { image: prev.jpg } }
+        binding: { type: hid, consumer: PREV_TRACK }
+
+      - slot: 2
+        scope: host:PC2
+        display: { renderer: static_jpeg, config: { image: next.jpg } }
+        binding: { type: hid, consumer: NEXT_TRACK }
+
+      # Push-to-talk (TBD: hold-style needs RP2350 link to support
+      # key-up events; left as a placeholder until that decision lands).
+      - slot: 3
+        scope: host:PC2
+        display:
+          renderer: static_jpeg
+          config: { image: discord.jpg, label: Discord PTT }
+        binding:
+          type: hid
+          chord: 'ctrl+shift+p'
+          # hold: true   # (proposed) — sends keys-down on press, keys-up
+          #              #    on release, so the chord is literally held
+          #              #    while your finger is on the deskpad key.
+
+      - slot: 4
+        scope: global
+        display: { renderer: clock }
+        binding: { type: none }
+
+      # HA toggle for a Do-Not-Disturb input_boolean. Bulb renderer reuses
+      # itself for "is this thing on?" semantics beyond just lights.
+      - slot: 5
+        scope: global
+        entity: input_boolean.dnd
+        display: { renderer: bulb, config: { label: DND } }
+        binding: { type: ha, service: input_boolean.toggle }
+
+# ---------------------------------------------------------------------------
+# Encoders — three rotary controls. Per-page schema (so volume can do
+# something different on the music page); `all:` is shorthand for "same
+# binding on every page".
+
+encoders:
+  - encoder: 0    # big central knob
+    all:
+      twist_pos: { type: hid, consumer: VOL_UP   }
+      twist_neg: { type: hid, consumer: VOL_DOWN }
+      press:     { type: hid, consumer: MUTE     }
+
+  # Generic `ddc` binding shape: bus + vcp + (delta | value | command).
+  # Encoders typically use `delta` (relative change); buttons typically
+  # use `value` (absolute) or `command` (named DDC op like 'pip_toggle').
+  # `vcp: 0x10` is the standardised brightness VCP code.
+  - encoder: 1    # left small knob
+    all:
+      twist_pos: { type: ddc, bus: A, vcp: 0x10, delta: +5 }
+      twist_neg: { type: ddc, bus: A, vcp: 0x10, delta: -5 }
+      press:     { type: none }
+
+  - encoder: 2    # right small knob
+    all:
+      twist_pos: { type: ddc, bus: B, vcp: 0x10, delta: +5 }
+      twist_neg: { type: ddc, bus: B, vcp: 0x10, delta: -5 }
+      press:     { type: none }
+
+# ---------------------------------------------------------------------------
+# Example late-phase bindings (NOT in v1) — sketched here so the schema
+# can grow naturally to cover them. The U38 supports PIP/PBP; deskpad
+# could expose buttons to set its layout once the ddc command catalogue
+# is filled in. VCP codes are placeholders pending real testing.
+#
+#   - slot: 0
+#     scope: global
+#     display: { renderer: static_jpeg, config: { label: 'PIP off' } }
+#     binding: { type: ddc, bus: A, command: pip_off }    # named convenience
+#
+#   - slot: 1
+#     scope: global
+#     display: { renderer: static_jpeg, config: { label: 'PIP small' } }
+#     binding: { type: ddc, bus: A, command: pip_small }
+#
+#   - slot: 2
+#     scope: global
+#     display: { renderer: static_jpeg, config: { label: 'Side by side' } }
+#     binding: { type: ddc, bus: A, command: pbp }
+#
+# Named commands resolve to a (vcp, value) pair in firmware via a table;
+# users can also write raw `{ vcp: 0x..., value: 0x.. }` for codes not
+# yet in the named-command catalogue.
+
+# ---------------------------------------------------------------------------
+# Design decisions (running ledger):
+#
+# 1. Renderer set: SHIPPING — monitor, bulb, thermostat, static_jpeg,
+#    clock, text_value. Add others as concrete needs surface.
+#
+# 2. KVM bindings: BOTH — `kvm_select { target: PC1|PC2 }` is the
+#    primitive; `kvm_toggle` is sugar for "select the not-currently-
+#    active host". Implemented as one function with a shorthand caller.
+#
+# 3. DDC binding: GENERIC — `ddc { bus, vcp, delta | value | command }`.
+#    Named commands (`command: pip_off` etc.) resolve to (vcp, value)
+#    via a firmware table. Late-phase: catalogue PIP/PBP commands.
+#    PIP-via-HDMI-out from the P4 would need a MIPI-DSI-to-HDMI bridge
+#    add-on board — feasible but its own project.
+#
+# 4. HID chord: STRING — "ctrl+shift+m". Modifier aliases: ctrl=lctrl,
+#    shift=lshift, alt=lalt, cmd/win/meta=lwin. Right-hand explicit
+#    (rctrl, rshift, etc.).
+#
+# 5. HID hold-style (PTT): DEFERRED — tap-style mute is sufficient for
+#    the common case. Schema reserves `hold: true` on hid bindings as
+#    a documented future field; firmware doesn't implement it in v1.
+#    Revisit if a real PTT need surfaces (large meetings, noisy room).
+#
+# 6. KVM topology: IN CONFIG — `device.kvm` block (see top of file).
+#    Lifted from ddc.h #defines so you can change cables without a
+#    reflash. Phase-3 work to read these out of the config struct
+#    instead of literal constants.
+#
+# 7. Secrets: NVS-ONLY — never serialised. Separate /api/credentials
+#    endpoint with masked GET.
+#
+# 8. Side keys: HARD-WIRED — side N -> page N, not configurable.

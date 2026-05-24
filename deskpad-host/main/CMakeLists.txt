@@ -43,10 +43,11 @@ foreach(page RANGE 0 2)
 endforeach()
 
 idf_component_register(
-    SRCS "config.c" "main.c" "actions.c" "ddc.c" "key_anim.c"
-         "jpeg_enc.c" "live_key.c" "clock_key.c"
+    SRCS "http_server.c" "network.c" "config.c" "main.c" "actions.c" "ddc.c" "key_anim.c"
+         "jpeg_enc.c" "live_key.c" "clock_key.c" "host_state.c" "monitor_render.c"
     INCLUDE_DIRS "."
     REQUIRES driver usb akp03e esp_driver_i2c esp_driver_jpeg
              esp_timer lvgl nvs_flash json
-    EMBED_FILES ${KEYIMAGES}
+             esp_eth esp_netif esp_event esp_http_server app_update
+    EMBED_FILES ${KEYIMAGES} "spa_index.html"
 )
