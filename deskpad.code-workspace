@@ -1,0 +1,8 @@
+{
+  "folders": [
+    { "path": "." },
+    { "path": "deskpad-host" },
+    { "path": "deskpad-hid" }
+  ],
+  "settings": {}
+}

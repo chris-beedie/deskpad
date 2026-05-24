@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -T fields -e usb.device_address -e usb.idVendor -e usb.idProduct -Y \"usb.idVendor\")",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"usb.device_address == 30\" -c 60 -T fields -e frame.number -e frame.time_relative -e usb.transfer_type -e usb.endpoint_address.direction -e usb.endpoint_address.number -e usb.urb_type -e usb.data_len)",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"usb.device_address == 30 && \\(usb.transfer_type == 0x02 || \\(usb.transfer_type == 0x01 && usb.endpoint_address.direction == 0\\)\\)\" -T fields -e frame.number -e frame.time_relative -e usb.transfer_type -e usb.endpoint_address.direction -e usb.endpoint_address.number -e usb.data_len -e usb.bmRequestType -e usb.setup.bRequest -e usb.setup.wValue)",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"\\(usb.device_address == 30 || usb.device_address == 31\\) && usb.data_len > 0\" -c 30 -T fields -e frame.number -e frame.time_relative -e usb.device_address -e usb.transfer_type -e usb.endpoint_address.direction -e usb.endpoint_address.number -e usb.data_len)",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"\\(usb.device_address == 30 || usb.device_address == 31\\) && usb.capdata\" -c 30 -T fields -e frame.number -e frame.time_relative -e usb.device_address -e usb.transfer_type -e usb.endpoint_address.direction -e usb.endpoint_address.number -e usb.urb_len)",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"\\(usb.device_address == 30 || usb.device_address == 31\\)\" -T fields -e frame.number -e frame.time_relative -e usb.device_address -e usb.transfer_type -e usb.endpoint_address.direction -e usb.endpoint_address.number -e usb.urb_len -e usb.data_len)",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"\\(usb.device_address == 30 || usb.device_address == 31\\) && usb.endpoint_address.direction == 0 && usb.transfer_type != 0x02\" -T fields -e frame.number -e frame.time_relative -e usb.device_address -e usb.transfer_type -e usb.endpoint_address.number -e usb.urb_len -e usb.data_len)",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"frame.number == 85\" -T fields -e usb.capdata)",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"frame.number == 85\" -x)",
+      "Bash('C:\\\\Program Files\\\\Wireshark\\\\tshark.exe' -r akp_capture.pcap -Y 'frame.number == __TRACKED_VAR__' -x)",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"frame.number >= 41 && frame.number <= 84 && usb.device_address == 31 && usb.transfer_type == 0x02\" -T fields -e frame.number -e frame.time_relative -e usb.bmRequestType -e usb.setup.bRequest -e usb.setup.wValue -e usb.setup.wIndex -e usb.setup.wLength -e usb.data_len)",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"usb.device_address == 31 && usb.transfer_type == 0x01 && usb.endpoint_address.direction == 0 && usb.endpoint_address.number == 3 && usb.urb_len == 1024\" -T fields -e frame.number)",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"usb.device_address == 31 && usb.transfer_type == 0x01 && usb.endpoint_address.direction == 0 && usb.endpoint_address.number == 3\" -T fields -e frame.number -e usb.urb_len)",
+      "Bash(awk 'NR==1 || $2!=\"\" && $2!=\"0\"')",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"usb.device_address == 31 && usb.transfer_type == 0x01 && usb.endpoint_address.direction == 0\" -T fields -e frame.number -e frame.len)",
+      "Bash(awk '$2 > 100')",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r akp_capture.pcap -Y \"frame.number in {85,87,89,91,93,95}\" -T fields -e frame.number -e usb.capdata)",
+      "Bash('C:\\\\Program Files\\\\Wireshark\\\\tshark.exe' -r button.pcap -Y 'frame.number == __TRACKED_VAR__' -x)",
+      "Read(//tmp/akp-research/mirajazz/src/**)",
+      "Read(//tmp/akp-research/opendeck-akp03/src/**)",
+      "Bash(cygpath -w /tmp/akp-research/mirajazz/src/device.rs)",
+      "Bash(mount)",
+      "Read(//c/Users/chris/AppData/Local/Temp/akp-research/mirajazz/src/**)",
+      "Read(//c/Users/chris/AppData/Local/Temp/akp-research/opendeck-akp03/src/**)",
+      "Read(//c/Users/chris/AppData/Local/Temp/akp-research/Ajazz-AKP153-reverse-engineering/**)",
+      "Read(//c/Users/chris/AppData/Local/Temp/akp-research/mirajazz/examples/**)",
+      "Read(//c/Users/chris/AppData/Local/Temp/akp-research/ajazz-sdk/src/**)",
+      "Bash(cd /tmp/akp-research && grep -rni \"QUCMD\\\\|0x51.*0x55.*0x43\\\\|qu.*cmd\\\\|0x4d.*0x44.*0x1f\\\\|hex.*51.*55.*43\" --include=\"*.rs\" --include=\"*.py\" --include=\"*.md\" 2>/dev/null | head -50)",
+      "Read(//tmp/**)",
+      "Bash(cd /tmp/akp-research && grep -rni \"0x4d.*0x4f.*0x44\\\\|set_mode\\\\|MOD\\\\b\\\\|0x30 + mode\" --include=\"*.rs\" --include=\"*.py\" --include=\"*.md\" 2>/dev/null | head -30)",
+      "Bash(grep -E \"\\(jpeg_enc_input_format|jpeg_down_sampling_type_t|jpeg_enc_buffer_alloc_direction_t|JPEG_DEC_RGB|JPEG_ENC_\\)\" C:/esp/v5.5.4/esp-idf/components/esp_driver_jpeg/include/jpeg_types.h C:/esp/v5.5.4/esp-idf/components/hal/include/hal/jpeg_types.h 2>/dev/null | head -40)",
+      "Read(//c/esp/v5.5.4/esp-idf/components/esp_driver_jpeg/include/**)",
+      "Bash(\"C:\\\\Program Files\\\\Wireshark\\\\tshark.exe\" -r *)",
+      "Bash('C:\\\\Program Files\\\\Wireshark\\\\tshark.exe' -r *)"
+    ]
+  }
+}

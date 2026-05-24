@@ -1,0 +1,54 @@
+# ESP-IDF defaults for the Waveshare ESP32-P4-NANO.
+# After cloning, run `idf.py set-target esp32p4` to materialise sdkconfig from these.
+
+CONFIG_IDF_TARGET="esp32p4"
+
+# Waveshare's first-batch ESP32-P4-NANO ships with v1.0 silicon. ESP-IDF v5.5
+# defaults to v3.1 (ECO5), which is hw-incompatible with <v3.0. Switch into the
+# pre-v3 family and pin minimum to v1.0. Selecting REV_LESS_V3 also resets the
+# SOC_USB_OTG_SUPPORTED Kconfig default to n, so force it back on.
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_100=y
+CONFIG_SOC_USB_OTG_SUPPORTED=y
+
+# Console: CH343 USB-C UART, wired to P4 UART0 (default pins GPIO37 RX / GPIO38 TX).
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# Bigger main-task stack — firmware will grow quickly, default 3584 bytes is tight.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# Flash chip on P4-NANO is GD25Q128ESIG (128 Mbit = 16 MB).
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+
+# Logging at INFO by default; raise to DEBUG via menuconfig when chasing a bug.
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_COLORS=y
+
+# Phase 1: don't monitor IDLE tasks via the Task WDT — there are no real tasks
+# to watch yet, and the heartbeat loop tends to false-trigger the default config.
+# Re-enable per-task once real subsystems exist (AKP host, MQTT, etc.).
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
+
+# USB host: keep the BALANCED bias preset and instead carve the FIFO at runtime
+# via host_cfg.fifo_settings_custom in main.c (rx=260, ptx=260, nptx=64). That
+# gives the AKP03E enough budget for both its 1024-byte interrupt OUT EP and
+# its 512-byte IN EP, which the canned BIAS_PERIODIC_OUT preset can't.
+CONFIG_USB_HOST_HW_BUFFER_BIAS_BALANCED=y
+# Control-transfer buffer up to 1024 B (HID GET_REPORT in the AKP init reads 512).
+CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE=1024
+
+# LVGL: enable extra Montserrat font sizes for the 60x60 LCD-key displays.
+# 14 is on by default; 18/22/28 cover labels and big-digit readouts.
+CONFIG_LV_FONT_MONTSERRAT_18=y
+CONFIG_LV_FONT_MONTSERRAT_22=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+
+# Enable PSRAM — the hardware JPEG encoder allocates its output buffer with
+# MALLOC_CAP_SPIRAM and silently fails without it. The P4-NANO board has
+# Hex-mode HP PSRAM (32 MB on Waveshare's first batch).
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_HEX=y
+CONFIG_SPIRAM_SPEED_200M=y

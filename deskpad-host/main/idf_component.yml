@@ -1,0 +1,8 @@
+## ESP-IDF managed component manifest for deskpad-host (main).
+## Pins the IDF version because the P4-NANO board has v1.0 silicon —
+## IDF v6.x's clock-tree init code asserts at runtime on v1.0 even
+## after lowering CONFIG_ESP32P4_REV_MIN. Stay on v5.5 until we either
+## upgrade to v3.x P4 silicon or v6.x regains v1.0 compatibility.
+dependencies:
+  idf: ">=5.5,<6.0"
+  lvgl/lvgl: "^9.0.0"
