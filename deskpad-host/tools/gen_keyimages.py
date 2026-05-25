@@ -1,4 +1,4 @@
-"""Generate 60x60 JPEGs for the AKP03E LCD keys.
+"""Generate 64x64 JPEGs for the AKP03E LCD keys.
 
 Three pages of six keys, each with a default and a pressed (shrunk-on-black)
 variant — 36 files total. Each image is pre-rotated 90 degrees CCW to
@@ -14,13 +14,17 @@ This script is invoked at CMake configure time by main/CMakeLists.txt, so any
 edit here, or any add/remove/edit in source_images/, re-triggers regeneration
 on the next idf.py build.
 """
+import sys
 from pathlib import Path
 from PIL import Image, ImageDraw
 
-SIZE = 60
+SIZE = 64
 PRESSED_INNER = 48
 ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = ROOT / "main" / "keyimages"
+# CMake passes the build-tree output dir as argv[1]; standalone runs fall back
+# to a scratch dir under the repo's build/ so we never write into the source
+# tree.
+OUT_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else (ROOT / "build" / "keyimages")
 SOURCE_DIR = ROOT / "source_images"
 SOURCE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".tif")
 
@@ -39,7 +43,7 @@ def find_source(page: int, key: int) -> Path | None:
 
 def load_source(path: Path) -> Image.Image:
     """Open a user image, composite alpha over black, centre-crop to square,
-    resize to SIZE x SIZE. Returns a 60x60 RGB image ready for save()."""
+    resize to SIZE x SIZE. Returns a 64x64 RGB image ready for save()."""
     img = Image.open(path)
     if img.mode in ("RGBA", "LA"):
         bg = Image.new("RGB", img.size, (0, 0, 0))
@@ -347,7 +351,7 @@ PAGES = [
 
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"writing 60x60 JPEGs to {OUT_DIR}")
+    print(f"writing 64x64 JPEGs to {OUT_DIR}")
     for page_idx, (page_name, keys) in enumerate(PAGES):
         for key_idx, (key_name, fn) in enumerate(keys):
             src = find_source(page_idx, key_idx)

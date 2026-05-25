@@ -28,9 +28,9 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # Enable the rollback / mark-as-valid flow on OTA boots.
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
-# HTTP server: bump max URI handlers and allow larger request headers
-# for the OTA upload path.
-CONFIG_HTTPD_MAX_URI_HANDLERS=12
+# HTTP server: allow larger request headers for the OTA upload path.
+# (max_uri_handlers is overridden at runtime in http_server.c since
+# CONFIG_HTTPD_MAX_URI_HANDLERS isn't picked up reliably on regen.)
 CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 
 # Logging at INFO by default; raise to DEBUG via menuconfig when chasing a bug.

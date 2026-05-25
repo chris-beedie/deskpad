@@ -4,309 +4,565 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>deskpad</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='10' y='20' width='80' height='60' rx='8' fill='%231a1a1f' stroke='%23555' stroke-width='4'/><circle cx='35' cy='50' r='12' fill='%231D9E75'/><circle cx='65' cy='50' r='12' fill='%237F77DD'/></svg>">
 <style>
-  :root{color-scheme:light dark;font:14px system-ui,sans-serif}
-  body{max-width:1100px;margin:1.5rem auto;padding:0 1rem}
-  h1{margin:0;font-size:1.4rem}
-  h2{margin:1.5rem 0 .5rem;font-size:1.1rem;border-bottom:1px solid #8884;padding-bottom:.2rem}
-  h3{margin:1rem 0 .35rem;font-size:.95rem}
-  .topbar{display:flex;align-items:center;gap:.7rem;margin-bottom:.5rem}
-  #status{color:#888;font-size:.9rem;margin-left:auto}
-  .pageblock{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin:.4rem 0 1rem}
-  .slot, .encrow{background:#7771;border:1px solid #7772;border-radius:.4rem;padding:.5rem}
-  .slot h4, .encrow h4{margin:0 0 .35rem;font-size:.85rem;color:#888}
-  .slot .grid, .encrow .grid{display:grid;grid-template-columns:auto 1fr;gap:.25rem .5rem;align-items:center}
-  label{font-size:.85rem;color:#888}
-  select, input[type=text], input[type=number]{padding:.3rem .4rem;font:inherit;width:100%;box-sizing:border-box}
-  .bindbox, .rendbox{margin-top:.4rem;padding:.4rem;border:1px dashed #8883;border-radius:.3rem}
-  .bindbox > legend, .rendbox > legend{font-size:.8rem;padding:0 .3rem;color:#888}
-  button{padding:.4rem .8rem;font:inherit;cursor:pointer}
-  button.primary{background:#36c;color:#fff;border:none;border-radius:.3rem}
-  .err{color:#c00}
-  .ok{color:#080}
-  .enc-pages{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-top:.4rem}
-  .copyrow{display:flex;gap:.5rem;align-items:center;margin-top:.25rem}
-  progress{width:200px;height:.6rem}
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{color-scheme:dark}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#111;color:#ccc;min-height:100vh;font-size:14px;line-height:1.4}
+  .shell{max-width:880px;margin:0 auto;padding:1rem}
+  .top{background:#1a1a1f;border:1px solid #2a2a30;border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+  .brand{font-size:14px;font-weight:500;color:#888;letter-spacing:.06em;text-transform:uppercase}
+  .pills{display:flex;gap:.4rem;flex-wrap:wrap;margin-left:auto}
+  .pill{font-size:11px;padding:4px 10px;border-radius:6px;letter-spacing:.02em;background:#1a1a20;color:#666}
+  .pill.s1{background:#0F2D24;color:#5DCAA5}
+  .pill.s2{background:#1E1B3A;color:#AFA9EC}
+  .pill.warn{background:#2D2106;color:#EF9F27}
+  .pill.err{background:#2a1418;color:#cc7a82}
+  .pill.ok{background:#0F2D24;color:#5DCAA5}
+  nav.tabs{display:flex;gap:.25rem;margin-bottom:1rem;flex-wrap:wrap}
+  nav.tabs a{padding:.5rem .85rem;background:#1a1a1f;border:1px solid #2a2a30;border-radius:8px;color:#888;font-size:12px;text-decoration:none;letter-spacing:.02em}
+  nav.tabs a:hover{color:#ccc;background:#22222a}
+  nav.tabs a.active{color:#ccc;background:#252530;border-color:#3a3a44}
+  .card{background:#1a1a1f;border:1px solid #2a2a30;border-radius:12px;padding:1.25rem;margin-bottom:1rem}
+  .card h2{font-size:11px;font-weight:500;color:#888;letter-spacing:.06em;text-transform:uppercase;margin-bottom:.75rem}
+  .card h3{font-size:12px;font-weight:500;color:#ccc;margin:1rem 0 .5rem}
+  .switcher{display:flex;background:#111115;border-radius:10px;padding:4px;gap:4px;margin-bottom:.75rem}
+  .sw{flex:1;padding:14px 8px;border-radius:8px;text-align:center;cursor:pointer;border:1.5px solid transparent;transition:all .15s;user-select:none}
+  .sw .n{font-size:20px;font-weight:500}
+  .sw .l{font-size:11px;margin-top:3px;opacity:.7}
+  .sw.s1{background:#0F2D24;border-color:#1D9E7560}
+  .sw.s1 .n,.sw.s1 .l{color:#5DCAA5}
+  .sw.s2{background:#1E1B3A;border-color:#7F77DD60}
+  .sw.s2 .n,.sw.s2 .l{color:#AFA9EC}
+  .sw.off .n,.sw.off .l{color:#444}
+  label{font-size:11px;color:#666}
+  input[type=text],input[type=password],input[type=number],select,textarea{
+    width:100%;padding:8px 10px;background:#111115;border:1px solid #3a3a44;border-radius:7px;
+    color:#ccc;font-size:13px;font-family:inherit;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:#555;background:#0d0d12}
+  input.mono{font-family:'SF Mono',Menlo,Consolas,monospace;font-size:12px}
+  .field{display:grid;grid-template-columns:100px 1fr;gap:.5rem;align-items:center;margin-bottom:.5rem}
+  .field label{margin:0}
+  button{padding:.55rem 1rem;font:inherit;font-size:12px;background:#252530;border:1px solid #3a3a44;border-radius:8px;color:#ccc;cursor:pointer;letter-spacing:.02em}
+  button:hover{background:#30303c}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:#0F2D24;border-color:#1D9E7560;color:#5DCAA5}
+  button.primary:hover{background:#143828}
+  button.danger{background:#2a1418;border-color:#5a2a30;color:#cc7a82}
+  .btn-row{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem}
+  .slots{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}
+  @media (max-width:640px){.slots{grid-template-columns:1fr 1fr}}
+  .slot{background:#111115;border:1px solid #2a2a30;border-radius:8px;padding:.65rem}
+  .slot h4{font-size:10px;color:#666;letter-spacing:.06em;text-transform:uppercase;margin-bottom:.4rem}
+  #status{font-size:11px;color:#666;margin-left:auto}
+  #status.ok{color:#5DCAA5}
+  #status.err{color:#cc7a82}
+  .hrow{display:flex;justify-content:space-between;padding:.5rem;border-radius:6px;background:#111115;margin-bottom:.35rem;font-size:12px}
+  .hrow .hid{font-family:monospace;color:#aaa}
+  .hrow .hmsg{color:#888}
+  .hrow.warn{background:#2D2106}
+  .hrow.err{background:#2a1418}
+  progress{width:100%;height:.6rem;-webkit-appearance:none;appearance:none}
+  progress::-webkit-progress-bar{background:#111115;border-radius:4px}
+  progress::-webkit-progress-value{background:#5DCAA5;border-radius:4px}
+  .foot{font-size:10px;color:#444;text-align:center;margin-top:1rem}
+  .foot code{font-family:monospace;color:#666}
 </style>
 </head>
 <body>
+<div class="shell">
 
-<div class="topbar">
-  <h1>deskpad</h1>
-  <button id="save" class="primary">save</button>
+<div class="top">
+  <div class="brand">deskpad</div>
+  <div class="pills" id="topPills"></div>
   <span id="status">loading…</span>
 </div>
 
-<div id="cfg"></div>
+<nav class="tabs">
+  <a href="#/" data-route="">Dashboard</a>
+  <a href="#/page/0" data-route="page/0">Page 0</a>
+  <a href="#/page/1" data-route="page/1">Page 1</a>
+  <a href="#/page/2" data-route="page/2">Page 2</a>
+  <a href="#/encoders" data-route="encoders">Encoders</a>
+  <a href="#/kvm" data-route="kvm">KVM</a>
+  <a href="#/notifications" data-route="notifications">Notifications</a>
+  <a href="#/credentials" data-route="credentials">Credentials</a>
+  <a href="#/firmware" data-route="firmware">Firmware</a>
+</nav>
 
-<h2>firmware</h2>
-<div class="copyrow">
-  <input id="ota" type="file" accept=".bin">
-  <button id="upload">upload &amp; reboot</button>
-  <progress id="otaprog" max="100" value="0" hidden></progress>
-  <span id="otamsg"></span>
+<main id="main"></main>
+
+<div class="foot">deskpad · <code id="ipFoot">--</code> · uptime <code id="upFoot">--</code></div>
+
 </div>
-
 <script>
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
+const el = (tag, props, ...kids) => { const e=document.createElement(tag); if(props)Object.assign(e,props); for(const k of kids)e.append(k); return e; };
 const status = $('status');
+const setStatus = (msg, cls='') => { status.textContent = msg; status.className = cls; };
+
+async function api(method, path, body) {
+  const opts = { method };
+  if (body !== undefined) {
+    opts.headers = { 'content-type': 'application/json' };
+    opts.body = typeof body === 'string' ? body : JSON.stringify(body);
+  }
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error(`${method} ${path} -> ${r.status}: ${await r.text()}`);
+  const ct = r.headers.get('content-type') || '';
+  return ct.includes('json') ? r.json() : r.text();
+}
 
 let enums = { scopes: [], hosts: [], renderers: [], binding_types: [] };
 let cfg = null;
+async function loadCommon() {
+  const [e, c] = await Promise.all([api('GET', '/api/enums'), api('GET', '/api/config')]);
+  enums = e; cfg = c;
+}
 
-const RENDERER_FIELDS = {
-  none:        [],
-  static_jpeg: ['label', 'image'],
-  clock:       ['label'],
-  bulb:        ['label', 'state_topic', 'on_value'],
-  monitor:     ['label', 'lit_when'],
-  thermostat:  ['label', 'current_topic', 'target_topic', 'boost_remaining_topic'],
-  text_value:  ['label', 'state_topic', 'unit'],
+async function pollState() {
+  try {
+    const [s, h] = await Promise.all([api('GET', '/api/state'), api('GET', '/api/health')]);
+    const pills = $('topPills'); pills.innerHTML = '';
+    const hostCls = s.active_host === 'PC1' ? 's1' : s.active_host === 'PC2' ? 's2' : '';
+    pills.append(el('span', { className: 'pill ' + hostCls, textContent: 'Host: ' + s.active_host }));
+    pills.append(el('span', { className: 'pill', textContent: 'Page ' + s.current_page }));
+    pills.append(el('span', { className: 'pill ' + (s.hid_link_up ? 'ok' : 'err'), textContent: 'HID ' + (s.hid_link_up ? 'up' : 'down') }));
+    pills.append(el('span', { className: 'pill ' + (s.mqtt_connected ? 'ok' : 'warn'), textContent: 'MQTT ' + (s.mqtt_connected ? 'on' : 'off') }));
+    const worstCls = h.worst === 'ERROR' ? 'err' : h.worst === 'WARN' ? 'warn' : 'ok';
+    pills.append(el('span', { className: 'pill ' + worstCls, textContent: 'Health: ' + h.worst }));
+    $('ipFoot').textContent = s.ip || '--';
+    const m = Math.floor((s.uptime_s||0)/60), hh = Math.floor(m/60);
+    $('upFoot').textContent = `${hh}h ${m%60}m`;
+  } catch (e) {}
+}
+setInterval(pollState, 3000);
+
+const routes = {
+  '':              renderDashboard,
+  'page/0':        () => renderPage(0),
+  'page/1':        () => renderPage(1),
+  'page/2':        () => renderPage(2),
+  'encoders':      renderEncoders,
+  'kvm':           renderKvm,
+  'notifications': renderNotifications,
+  'credentials':   renderCredentials,
+  'firmware':      renderFirmware,
 };
+function currentRoute() { return location.hash.startsWith('#/') ? location.hash.slice(2) : ''; }
+async function navigate() {
+  const r = currentRoute();
+  for (const a of document.querySelectorAll('nav.tabs a')) a.classList.toggle('active', a.dataset.route === r);
+  setStatus('loading…');
+  try {
+    if (!cfg) await loadCommon();
+    const fn = routes[r] || renderDashboard;
+    await fn();
+    setStatus('ready', 'ok');
+  } catch (e) { setStatus('error: ' + e.message, 'err'); console.error(e); }
+}
+window.addEventListener('hashchange', navigate);
 
-// ----- generic element helpers ----------------------------------------------
-function el(tag, props, ...kids) {
-  const e = document.createElement(tag);
-  if (props) Object.assign(e, props);
-  for (const k of kids) e.append(k);
-  return e;
-}
-function row(labelText, control) {
-  return [el('label', { textContent: labelText }), control];
-}
-function select(options, value, onChange) {
+function field(label, control) { return el('div', { className: 'field' }, el('label', { textContent: label }), control); }
+function makeSelect(opts, value, onChange) {
   const s = el('select');
-  for (const o of options) s.append(el('option', { value: o, textContent: o, selected: o === value }));
-  s.addEventListener('change', () => onChange(s.value));
+  for (const o of opts) s.append(el('option', { value: o, textContent: o, selected: o === value }));
+  s.onchange = () => onChange(s.value);
   return s;
 }
-function textInput(value, onChange, placeholder) {
+function makeText(value, onChange, placeholder, mono=false) {
   const i = el('input', { type: 'text', value: value || '', placeholder: placeholder || '' });
-  i.addEventListener('change', () => onChange(i.value));
+  if (mono) i.className = 'mono';
+  i.onchange = () => onChange(i.value);
   return i;
 }
-function numInput(value, onChange) {
+function makeNum(value, onChange) {
   const i = el('input', { type: 'number', value: value ?? 0 });
-  i.addEventListener('change', () => onChange(parseInt(i.value, 10) || 0));
+  i.onchange = () => onChange(parseInt(i.value, 10) || 0);
   return i;
 }
-function checkbox(value, onChange) {
+function makeCheck(value, onChange) {
   const i = el('input', { type: 'checkbox', checked: !!value });
-  i.addEventListener('change', () => onChange(i.checked));
+  i.onchange = () => onChange(i.checked);
   return i;
 }
 
-// ----- renderer config sub-form ---------------------------------------------
-function renderRendererForm(rendererName, config, onChange) {
-  const box = el('fieldset', { className: 'rendbox' });
-  box.append(el('legend', { textContent: 'display config' }));
-  const grid = el('div', { className: 'grid' });
-  const fields = RENDERER_FIELDS[rendererName] || [];
-  for (const f of fields) {
-    if (f === 'lit_when') {
-      grid.append(...row('lit_when', select(enums.hosts, config.lit_when, v => { config.lit_when = v; onChange(); })));
-    } else {
-      grid.append(...row(f, textInput(config[f], v => { config[f] = v; onChange(); })));
-    }
+async function renderDashboard() {
+  const m = $('main'); m.innerHTML = '';
+  const c = el('div', { className: 'card' });
+  c.append(el('h2', { textContent: 'Quick actions' }));
+  const [s, br] = await Promise.all([api('GET', '/api/state'), api('GET', '/api/brightness')]);
+  const sw = el('div', { className: 'switcher' });
+  const sw1 = el('div', { className: 'sw ' + (s.active_host==='PC1'?'s1':'off') }, el('div',{className:'n',textContent:'PC1'}), el('div',{className:'l',textContent:'Work'}));
+  const sw2 = el('div', { className: 'sw ' + (s.active_host==='PC2'?'s2':'off') }, el('div',{className:'n',textContent:'PC2'}), el('div',{className:'l',textContent:'Home'}));
+  sw1.onclick = async () => { await api('POST', '/api/action/kvm/select', { target: 'PC1' }); pollState(); navigate(); };
+  sw2.onclick = async () => { await api('POST', '/api/action/kvm/select', { target: 'PC2' }); pollState(); navigate(); };
+  sw.append(sw1, sw2);
+  c.append(sw);
+  const row = el('div', { className: 'btn-row' });
+  for (let p = 0; p < 3; p++) {
+    const b = el('button', { textContent: 'Page ' + p });
+    b.onclick = () => api('POST', '/api/action/page', { page: p }).then(pollState);
+    row.append(b);
   }
-  if (!fields.length) box.append(el('span', { textContent: '(no fields)', style: 'color:#888;font-size:.85rem' }));
-  else box.append(grid);
-  return box;
-}
+  c.append(row);
 
-// ----- binding sub-form -----------------------------------------------------
-function renderBindingForm(binding, onChange) {
-  const box = el('fieldset', { className: 'bindbox' });
-  box.append(el('legend', { textContent: 'binding' }));
-  const grid = el('div', { className: 'grid' });
+  // Brightness slider
+  const brWrap = el('div', { style: 'margin-top:1rem' });
+  const brLabel = el('label', { textContent: `AKP brightness: ${br.value}%`, style: 'display:block;margin-bottom:.25rem' });
+  const slider = el('input', { type: 'range', min: 0, max: 100, value: br.value, style: 'width:100%;accent-color:#5DCAA5' });
+  slider.oninput = () => { brLabel.textContent = `AKP brightness: ${slider.value}%`; };
+  slider.onchange = async () => { await api('PUT', '/api/brightness', { value: parseInt(slider.value, 10) }); };
+  brWrap.append(brLabel, slider);
+  c.append(brWrap);
+  m.append(c);
 
-  grid.append(...row('type', select(enums.binding_types, binding.type, v => {
-    binding.type = v;
-    onChange(true);   // structural change — re-render
-  })));
-
-  switch (binding.type) {
-    case 'kvm_select':
-      grid.append(...row('target', select(enums.hosts, binding.target || 'PC1', v => { binding.target = v; onChange(); })));
-      break;
-    case 'kvm_toggle':
-      break;
-    case 'hid_chord':
-      grid.append(...row('chord', textInput(binding.chord, v => { binding.chord = v; onChange(); }, 'ctrl+shift+m')));
-      grid.append(...row('hold',  checkbox(binding.hold, v => { binding.hold = v; onChange(); })));
-      break;
-    case 'hid_consumer':
-      grid.append(...row('consumer', textInput(binding.consumer, v => { binding.consumer = v; onChange(); }, 'PLAY_PAUSE')));
-      break;
-    case 'ha':
-      grid.append(...row('service', textInput(binding.service, v => { binding.service = v; onChange(); }, 'light.toggle')));
-      grid.append(...row('entity (override)', textInput(binding.entity, v => { binding.entity = v; onChange(); }, '(inherits slot.entity)')));
-      break;
-    case 'ddc':
-      grid.append(...row('bus', numInput(binding.bus, v => { binding.bus = v; onChange(); })));
-      grid.append(...row('vcp', numInput(binding.vcp, v => { binding.vcp = v; onChange(); })));
-      const variantOpts = ['', 'delta', 'value', 'command'];
-      const currentVariant = (binding.delta !== undefined) ? 'delta'
-                            : (binding.value !== undefined) ? 'value'
-                            : (binding.command !== undefined) ? 'command' : '';
-      grid.append(...row('variant', select(variantOpts, currentVariant, v => {
-        delete binding.delta; delete binding.value; delete binding.command;
-        if (v === 'delta') binding.delta = 0;
-        else if (v === 'value') binding.value = 0;
-        else if (v === 'command') binding.command = '';
-        onChange(true);
-      })));
-      if (binding.delta !== undefined)
-        grid.append(...row('delta', numInput(binding.delta, v => { binding.delta = v; onChange(); })));
-      if (binding.value !== undefined)
-        grid.append(...row('value', numInput(binding.value, v => { binding.value = v; onChange(); })));
-      if (binding.command !== undefined)
-        grid.append(...row('command', textInput(binding.command, v => { binding.command = v; onChange(); }, 'pip_off')));
-      break;
+  const hcard = el('div', { className: 'card' });
+  hcard.append(el('h2', { textContent: 'Subsystem health' }));
+  const h = await api('GET', '/api/health');
+  for (const e_ of h.entries) {
+    const cls = e_.severity === 'ERROR' ? 'err' : e_.severity === 'WARN' ? 'warn' : '';
+    hcard.append(el('div', { className: 'hrow ' + cls },
+      el('span', { className: 'hid', textContent: e_.id }),
+      el('span', { className: 'hmsg', textContent: e_.message })
+    ));
   }
-
-  box.append(grid);
-  return box;
+  if (!h.entries.length) hcard.append(el('div', { textContent: '(no entries yet)', style: 'color:#666;font-size:12px' }));
+  m.append(hcard);
 }
 
-// ----- slot card ------------------------------------------------------------
-function renderSlot(pageIdx, slotIdx, slot) {
-  const card = el('div', { className: 'slot' });
-  card.append(el('h4', { textContent: `p${pageIdx} · slot ${slotIdx}` }));
-  const grid = el('div', { className: 'grid' });
-  grid.append(...row('scope',  select(enums.scopes, slot.scope || 'global', v => { slot.scope = v; })));
-  grid.append(...row('entity', textInput(slot.entity, v => { slot.entity = v; }, 'optional')));
-  grid.append(...row('renderer', select(enums.renderers, slot.display?.renderer || 'none', v => {
-    slot.display = slot.display || { config: {} };
-    slot.display.renderer = v;
-    rerender();
-  })));
-  card.append(grid);
+const RENDERER_FIELDS = {
+  none: [], static_jpeg: ['label','image'], clock: ['label'],
+  bulb: ['label','state_topic','on_value'], monitor: ['label','lit_when'],
+  thermostat: ['label','current_topic','target_topic','boost_remaining_topic'],
+  text_value: ['label','state_topic','unit'],
+};
 
-  slot.display = slot.display || { renderer: 'none', config: {} };
-  slot.display.config = slot.display.config || {};
-  card.append(renderRendererForm(slot.display.renderer, slot.display.config, () => {}));
-
-  slot.binding = slot.binding || { type: 'none' };
-  card.append(renderBindingForm(slot.binding, (struct) => { if (struct) rerender(); }));
-  return card;
-}
-
-// ----- encoder card ---------------------------------------------------------
-function renderEncoder(encIdx, enc) {
+function rendererForm(name, config) {
   const wrap = el('div');
-  wrap.append(el('h3', { textContent: `encoder ${encIdx}` }));
-
-  const copyBtn = el('button', { textContent: 'copy page 0 → all' });
-  copyBtn.addEventListener('click', () => {
-    const src = enc.pages[0];
-    enc.pages = enc.pages.map(() => JSON.parse(JSON.stringify(src)));
-    rerender();
-  });
-  wrap.append(el('div', { className: 'copyrow' }, copyBtn));
-
-  const pages = el('div', { className: 'enc-pages' });
-  enc.pages.forEach((pg, pi) => {
-    const row = el('div', { className: 'encrow' });
-    row.append(el('h4', { textContent: `page ${pi}` }));
-    row.append(el('div', { textContent: 'press:', style: 'font-size:.8rem;color:#888' }));
-    row.append(renderBindingForm(pg.press, (struct) => { if (struct) rerender(); }));
-    row.append(el('div', { textContent: 'twist +:', style: 'font-size:.8rem;color:#888;margin-top:.3rem' }));
-    row.append(renderBindingForm(pg.twist_pos, (struct) => { if (struct) rerender(); }));
-    row.append(el('div', { textContent: 'twist –:', style: 'font-size:.8rem;color:#888;margin-top:.3rem' }));
-    row.append(renderBindingForm(pg.twist_neg, (struct) => { if (struct) rerender(); }));
-    pages.append(row);
-  });
-  wrap.append(pages);
+  const fields = RENDERER_FIELDS[name] || [];
+  for (const f of fields) {
+    if (f === 'lit_when') wrap.append(field(f, makeSelect(enums.hosts, config.lit_when, v => config.lit_when = v)));
+    else wrap.append(field(f, makeText(config[f], v => config[f] = v)));
+  }
+  if (!fields.length) wrap.append(el('div', { textContent: '(no params)', style: 'color:#555;font-size:11px' }));
   return wrap;
 }
 
-// ----- full render ----------------------------------------------------------
-function rerender() {
-  const root = $('cfg');
-  root.innerHTML = '';
-
-  // KVM topology
-  root.append(el('h2', { textContent: 'KVM topology' }));
-  const kvmGrid = el('div', { style: 'display:grid;grid-template-columns:auto 1fr auto 1fr;gap:.25rem .5rem;align-items:center' });
-  for (const which of ['monitor_a', 'monitor_b']) {
-    const m = cfg.kvm[which];
-    kvmGrid.append(el('label', { textContent: `${which} bus` }), numInput(m.ddc_bus, v => m.ddc_bus = v));
-    kvmGrid.append(el('span'), el('span'));   // filler
-    kvmGrid.append(el('label', { textContent: '  pc1' }), numInput(m.input_pc1, v => m.input_pc1 = v));
-    kvmGrid.append(el('label', { textContent: '  pc2' }), numInput(m.input_pc2, v => m.input_pc2 = v));
+function bindingForm(binding, onStructural) {
+  const wrap = el('div');
+  wrap.append(field('type', makeSelect(enums.binding_types, binding.type, v => { binding.type = v; onStructural(); })));
+  switch (binding.type) {
+    case 'kvm_select':
+      wrap.append(field('target', makeSelect(enums.hosts, binding.target || 'PC1', v => binding.target = v))); break;
+    case 'hid_chord':
+      wrap.append(field('chord', makeText(binding.chord, v => binding.chord = v, 'ctrl+shift+m', true)));
+      wrap.append(field('hold', makeCheck(binding.hold, v => binding.hold = v))); break;
+    case 'hid_consumer':
+      wrap.append(field('consumer', makeText(binding.consumer, v => binding.consumer = v, 'PLAY_PAUSE', true))); break;
+    case 'ha':
+      wrap.append(field('service', makeText(binding.service, v => binding.service = v, 'light.toggle', true)));
+      wrap.append(field('entity', makeText(binding.entity, v => binding.entity = v, '(inherits)', true))); break;
+    case 'ddc':
+      wrap.append(field('bus', makeNum(binding.bus, v => binding.bus = v)));
+      wrap.append(field('vcp', makeNum(binding.vcp, v => binding.vcp = v)));
+      const cur = binding.delta !== undefined ? 'delta' : binding.value !== undefined ? 'value' : binding.command !== undefined ? 'command' : '';
+      wrap.append(field('variant', makeSelect(['','delta','value','command'], cur, v => {
+        delete binding.delta; delete binding.value; delete binding.command;
+        if (v==='delta') binding.delta = 0; else if (v==='value') binding.value = 0; else if (v==='command') binding.command = '';
+        onStructural();
+      })));
+      if (binding.delta !== undefined) wrap.append(field('delta', makeNum(binding.delta, v => binding.delta = v)));
+      if (binding.value !== undefined) wrap.append(field('value', makeNum(binding.value, v => binding.value = v)));
+      if (binding.command !== undefined) wrap.append(field('command', makeText(binding.command, v => binding.command = v, 'pip_off', true)));
+      break;
   }
-  root.append(kvmGrid);
+  return wrap;
+}
 
-  // Pages
-  cfg.pages.forEach((page, pi) => {
-    root.append(el('h2', { textContent: `page ${pi}` }));
-    const grid = el('div', { className: 'pageblock' });
-    page.slots.forEach((slot, si) => grid.append(renderSlot(pi, si, slot)));
-    root.append(grid);
+async function renderPage(pi) {
+  const m = $('main'); m.innerHTML = '';
+  const c = el('div', { className: 'card' });
+  c.append(el('h2', { textContent: `Page ${pi}` }));
+  const grid = el('div', { className: 'slots' });
+  cfg.pages[pi].slots.forEach((slot, si) => {
+    slot.display = slot.display || { renderer: 'none', config: {} };
+    slot.display.config = slot.display.config || {};
+    slot.binding = slot.binding || { type: 'none' };
+    const card = el('div', { className: 'slot' });
+    card.append(el('h4', { textContent: `Slot ${si}` }));
+    card.append(field('scope', makeSelect(enums.scopes, slot.scope || 'global', v => slot.scope = v)));
+    card.append(field('entity', makeText(slot.entity, v => slot.entity = v, 'optional', true)));
+    card.append(field('renderer', makeSelect(enums.renderers, slot.display.renderer, v => { slot.display.renderer = v; renderPage(pi); })));
+    card.append(rendererForm(slot.display.renderer, slot.display.config));
+    card.append(el('h4', { textContent: 'Binding', style: 'margin-top:.5rem' }));
+    card.append(bindingForm(slot.binding, () => renderPage(pi)));
+    grid.append(card);
   });
-
-  // Encoders
-  root.append(el('h2', { textContent: 'encoders' }));
-  cfg.encoders.forEach((enc, ei) => root.append(renderEncoder(ei, enc)));
+  c.append(grid);
+  const save = el('button', { className: 'primary', textContent: 'Save page' });
+  save.onclick = async () => { save.disabled = true; await api('PUT', '/api/config', cfg); save.disabled = false; setStatus('saved', 'ok'); };
+  c.append(el('div', { className: 'btn-row' }, save));
+  m.append(c);
 }
 
-// ----- load + save ----------------------------------------------------------
-async function load() {
-  try {
-    const [e, c] = await Promise.all([
-      fetch('/api/enums').then(r => r.json()),
-      fetch('/api/config').then(r => r.json()),
-    ]);
-    enums = e; cfg = c;
-    rerender();
-    status.textContent = `loaded (v${cfg.version})`;
-  } catch (e) {
-    status.textContent = 'load failed: ' + e;
-    status.className = 'err';
-  }
-}
-
-$('save').addEventListener('click', async () => {
-  status.textContent = 'saving…'; status.className = '';
-  try {
-    const r = await fetch('/api/config', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(cfg),
+async function renderEncoders() {
+  const m = $('main'); m.innerHTML = '';
+  cfg.encoders.forEach((enc, ei) => {
+    const c = el('div', { className: 'card' });
+    c.append(el('h2', { textContent: `Encoder ${ei}` }));
+    const copy = el('button', { textContent: 'Copy page 0 → all pages' });
+    copy.onclick = () => { const src = enc.pages[0]; enc.pages = enc.pages.map(() => JSON.parse(JSON.stringify(src))); renderEncoders(); };
+    c.append(copy);
+    enc.pages.forEach((pg, pi) => {
+      c.append(el('h3', { textContent: `Page ${pi}` }));
+      for (const k of ['press','twist_pos','twist_neg']) {
+        c.append(el('div', { textContent: k, style: 'color:#666;font-size:11px;margin-top:.5rem' }));
+        c.append(bindingForm(pg[k] = pg[k] || { type: 'none' }, () => renderEncoders()));
+      }
     });
-    if (!r.ok) throw new Error(await r.text());
-    status.textContent = 'saved'; status.className = 'ok';
-  } catch (e) {
-    status.textContent = 'save failed: ' + e; status.className = 'err';
+    m.append(c);
+  });
+  const save = el('button', { className: 'primary', textContent: 'Save all encoders' });
+  save.onclick = async () => { await api('PUT', '/api/config', cfg); setStatus('saved', 'ok'); };
+  m.append(save);
+}
+
+async function renderKvm() {
+  const m = $('main'); m.innerHTML = '';
+  const c = el('div', { className: 'card' });
+  c.append(el('h2', { textContent: 'KVM topology' }));
+  c.append(el('div', { textContent: 'VCP 0x60 input values per monitor.', style: 'color:#666;font-size:11px;margin-bottom:.75rem' }));
+  for (const which of ['monitor_a','monitor_b']) {
+    const mm = cfg.kvm[which];
+    c.append(el('h3', { textContent: which.replace('monitor_','Monitor ').toUpperCase() }));
+    c.append(field('ddc bus', makeNum(mm.ddc_bus, v => mm.ddc_bus = v)));
+    c.append(field('pc1 input', makeNum(mm.input_pc1, v => mm.input_pc1 = v)));
+    c.append(field('pc2 input', makeNum(mm.input_pc2, v => mm.input_pc2 = v)));
   }
-});
+  const save = el('button', { className: 'primary', textContent: 'Save KVM' });
+  save.onclick = async () => { await api('PUT', '/api/config', cfg); setStatus('saved', 'ok'); };
+  c.append(el('div', { className: 'btn-row' }, save));
+  m.append(c);
+}
 
-// ----- OTA ------------------------------------------------------------------
-const otaMsg = $('otamsg');
-$('upload').addEventListener('click', () => {
-  const file = $('ota').files[0];
-  if (!file) { otaMsg.textContent = 'pick a .bin first'; otaMsg.className = 'err'; return; }
-  otaMsg.textContent = ''; otaMsg.className = '';
-  const prog = $('otaprog');
-  prog.hidden = false; prog.value = 0;
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/api/ota');
-  xhr.upload.onprogress = (e) => { if (e.lengthComputable) prog.value = Math.round(100*e.loaded/e.total); };
-  xhr.onload = async () => {
-    if (xhr.status >= 200 && xhr.status < 300) {
-      otaMsg.textContent = 'upload ok — rebooting…'; otaMsg.className = 'ok';
-      try { await fetch('/api/reboot', { method: 'POST' }); } catch {}
-    } else {
-      otaMsg.textContent = 'upload failed: ' + xhr.responseText;
-      otaMsg.className = 'err';
-    }
+async function renderNotifications() {
+  const m = $('main'); m.innerHTML = '';
+  let notifs = await api('GET', '/api/notifications');
+  const c = el('div', { className: 'card' });
+  c.append(el('h2', { textContent: 'Notifications' }));
+  c.append(el('div', { textContent: 'MQTT-triggered overlays on the AKP.', style: 'color:#666;font-size:11px;margin-bottom:.75rem' }));
+
+  function renderList() {
+    while (c.children.length > 2) c.removeChild(c.lastChild);
+    notifs.forEach((n, i) => {
+      n.trigger = n.trigger || { topic: '', on_value: '' };
+      n.display = n.display || { style: 'takeover', target_slot: 0, label: '', colour: '#E24B4A', duration_ms: 5000, dismiss_any_key: true, dismiss_source_off: false };
+      const block = el('div', { className: 'slot', style: 'margin-bottom:.5rem' });
+      block.append(el('h4', { textContent: 'Notification ' + i }));
+      block.append(field('id', makeText(n.id, v => n.id = v, 'doorbell', true)));
+      block.append(field('priority', makeNum(n.priority, v => n.priority = v)));
+      block.append(field('topic', makeText(n.trigger.topic, v => n.trigger.topic = v, 'homeassistant/binary_sensor/doorbell/state', true)));
+      block.append(field('on value', makeText(n.trigger.on_value, v => n.trigger.on_value = v, 'on', true)));
+      block.append(field('style', makeSelect(['takeover','overlay'], n.display.style, v => { n.display.style = v; renderList(); })));
+      if (n.display.style === 'overlay') block.append(field('target slot', makeNum(n.display.target_slot, v => n.display.target_slot = v)));
+      block.append(field('label', makeText(n.display.label, v => n.display.label = v, 'DOORBELL')));
+      block.append(field('colour', makeText(n.display.colour, v => n.display.colour = v, '#E24B4A', true)));
+      block.append(field('duration ms', makeNum(n.display.duration_ms, v => n.display.duration_ms = v)));
+      block.append(field('dismiss any key', makeCheck(n.display.dismiss_any_key, v => n.display.dismiss_any_key = v)));
+      block.append(field('dismiss source off', makeCheck(n.display.dismiss_source_off, v => n.display.dismiss_source_off = v)));
+      const del = el('button', { className: 'danger', textContent: 'Remove' });
+      del.onclick = () => { notifs.splice(i, 1); renderList(); };
+      block.append(el('div', { className: 'btn-row' }, del));
+      c.append(block);
+    });
+    const row = el('div', { className: 'btn-row' });
+    const add = el('button', { textContent: '+ Add' });
+    add.onclick = () => { notifs.push({ id: 'new', priority: 0, trigger: { topic: '', on_value: 'on' },
+      display: { style: 'takeover', target_slot: 0, label: '', colour: '#E24B4A', duration_ms: 5000, dismiss_any_key: true, dismiss_source_off: false } });
+      renderList(); };
+    const save = el('button', { className: 'primary', textContent: 'Save notifications' });
+    save.onclick = async () => { await api('PUT', '/api/notifications', notifs); setStatus('saved', 'ok'); };
+    row.append(add, save);
+    c.append(row);
+  }
+  renderList();
+  m.append(c);
+}
+
+async function renderCredentials() {
+  const m = $('main'); m.innerHTML = '';
+  const c = el('div', { className: 'card' });
+  c.append(el('h2', { textContent: 'MQTT credentials' }));
+  c.append(el('div', { textContent: 'Password is write-only — leave blank to keep existing.', style: 'color:#666;font-size:11px;margin-bottom:.75rem' }));
+  const cred = await api('GET', '/api/credentials');
+  const mqtt = cred.mqtt || {};
+  const hostI = makeText(mqtt.host, ()=>{}, 'ha.local', true);
+  const portI = makeNum(mqtt.port || 1883, ()=>{});
+  const userI = makeText(mqtt.user, ()=>{}, '(optional)', true);
+  const passI = el('input', { type: 'password', placeholder: mqtt.has_password ? '(unchanged)' : '(set new)', className: 'mono' });
+  c.append(field('host', hostI));
+  c.append(field('port', portI));
+  c.append(field('user', userI));
+  c.append(field('password', passI));
+  const save = el('button', { className: 'primary', textContent: 'Save & reconnect' });
+  save.onclick = async () => {
+    const body = { mqtt: { host: hostI.value, port: parseInt(portI.value, 10) || 1883, user: userI.value } };
+    if (passI.value) body.mqtt.password = passI.value;
+    await api('PUT', '/api/credentials', body);
+    setStatus('saved', 'ok');
   };
-  xhr.onerror = () => { otaMsg.textContent = 'upload network error'; otaMsg.className = 'err'; };
-  xhr.send(file);
-});
+  c.append(el('div', { className: 'btn-row' }, save));
+  m.append(c);
+}
 
-load();
+async function renderFirmware() {
+  const m = $('main'); m.innerHTML = '';
+
+  // ── OTA card ────────────────────────────────────────────────────────────
+  const ota = el('div', { className: 'card' });
+  ota.append(el('h2', { textContent: 'Firmware OTA' }));
+  ota.append(el('div', { textContent: 'Upload deskpad-host.bin. Device reboots into the new image.', style: 'color:#666;font-size:11px;margin-bottom:.75rem' }));
+  const otaInp = el('input', { type: 'file', accept: '.bin' });
+  const otaBtn = el('button', { className: 'primary', textContent: 'Upload & reboot' });
+  const otaProg = el('progress', { max: 100, value: 0 }); otaProg.hidden = true;
+  const otaMsg = el('div', { style: 'margin-top:.5rem;font-size:12px' });
+  ota.append(otaInp);
+  ota.append(el('div', { className: 'btn-row' }, otaBtn));
+  ota.append(otaProg);
+  ota.append(otaMsg);
+  otaBtn.onclick = () => {
+    const f = otaInp.files[0];
+    if (!f) { otaMsg.textContent = 'pick a .bin first'; return; }
+    otaBtn.disabled = true; otaProg.hidden = false; otaProg.value = 0; otaMsg.textContent = '';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/ota');
+    xhr.upload.onprogress = e => { if (e.lengthComputable) otaProg.value = Math.round(100*e.loaded/e.total); };
+    xhr.onload = async () => {
+      otaBtn.disabled = false;
+      if (xhr.status >= 200 && xhr.status < 300) { otaMsg.textContent = 'upload ok — rebooting…'; try { await api('POST', '/api/reboot'); } catch {} }
+      else otaMsg.textContent = 'upload failed: ' + xhr.responseText;
+    };
+    xhr.onerror = () => { otaMsg.textContent = 'network error'; otaBtn.disabled = false; };
+    xhr.send(f);
+  };
+  m.append(ota);
+
+  // ── AKP boot-logo card ──────────────────────────────────────────────────
+  // The boot logo is a single 320×240 JPEG persisted to the AKP's
+  // flash via the LOG opcode. We letterbox the source to 320×240,
+  // rotate +90° CW client-side (the AKP rotates content +90° at
+  // display time, so this cancels it), encode JPEG, and upload.
+  const blo = el('div', { className: 'card' });
+  blo.append(el('h2', { textContent: 'AKP boot logo' }));
+  blo.append(el('div', {
+    textContent: 'Upload a 320×240 PNG/JPEG. It is letterboxed, rotated 90° CW, JPEG-encoded, and written to the AKP\'s persistent flash. Power-cycle the AKP to see the new boot logo at startup.',
+    style: 'color:#666;font-size:11px;margin-bottom:.75rem'
+  }));
+  const bInp = el('input', { type: 'file', accept: '.jpg,.jpeg,.png,image/*' });
+  const bBtn = el('button', { className: 'primary', textContent: 'Upload', disabled: true });
+  const bProg = el('progress', { max: 100, value: 0 }); bProg.hidden = true;
+  const bMsg = el('div', { style: 'margin-top:.5rem;font-size:12px' });
+  const preview = el('div', { style: 'margin-top:.5rem' });
+  blo.append(bInp);
+  blo.append(el('div', { className: 'btn-row' }, bBtn));
+  blo.append(preview);
+  blo.append(bProg);
+  blo.append(bMsg);
+
+  // Payload prepared on file-choose; consumed on upload click.
+  let pendingPayload = null;
+
+  function logoToJpegBlobs(srcImg) {
+    const W = 320, H = 240;
+    // Letterbox source to 320×240 on a black background — this is what
+    // the device will display after its internal +90° rotation cancels
+    // our pre-rotation, so it's also the right thing to preview.
+    const src = document.createElement('canvas');
+    src.width = W; src.height = H;
+    const sctx = src.getContext('2d');
+    sctx.fillStyle = '#000';
+    sctx.fillRect(0, 0, W, H);
+    const scale = Math.min(W / srcImg.width, H / srcImg.height);
+    const sw = srcImg.width * scale, sh = srcImg.height * scale;
+    sctx.drawImage(srcImg, (W - sw) / 2, (H - sh) / 2, sw, sh);
+
+    // Rotate +90° CW into a 240×320 canvas for the device. Translating
+    // to (H, 0) and rotating π/2 maps (x, y) → (H − y, x).
+    const out = document.createElement('canvas');
+    out.width = H; out.height = W;
+    const octx = out.getContext('2d');
+    octx.translate(H, 0);
+    octx.rotate(Math.PI / 2);
+    octx.drawImage(src, 0, 0);
+
+    return Promise.all([
+      new Promise(r => src.toBlob(r, 'image/jpeg', 0.92)),  // preview
+      new Promise(r => out.toBlob(r, 'image/jpeg', 0.88)),  // payload
+    ]);
+  }
+
+  bInp.onchange = async () => {
+    pendingPayload = null;
+    bBtn.disabled = true;
+    bMsg.textContent = ''; bMsg.className = '';
+    preview.innerHTML = '';
+    const f = bInp.files[0];
+    if (!f) return;
+
+    bMsg.textContent = 'encoding…';
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    try {
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    } catch (e) {
+      bMsg.textContent = 'failed to decode image'; bMsg.className = 'err';
+      URL.revokeObjectURL(url); return;
+    }
+
+    const [previewBlob, payloadBlob] = await logoToJpegBlobs(img);
+    URL.revokeObjectURL(url);
+    const body = new Uint8Array(await payloadBlob.arrayBuffer());
+
+    // Preview = 320×240 letterboxed (what the AKP will actually display).
+    preview.append(el('img', { src: URL.createObjectURL(previewBlob),
+                                style: 'max-width:100%;border:1px solid #2a2a30;border-radius:4px' }));
+
+    if (body.length > 0xFFFF) {
+      bMsg.textContent = `encoded JPEG too large (${body.length} > 65535) — re-export at lower quality`;
+      bMsg.className = 'err';
+      return;
+    }
+    pendingPayload = body;
+    bMsg.textContent = `ready: ${body.length} bytes`;
+    bBtn.disabled = false;
+  };
+
+  bBtn.onclick = () => {
+    if (!pendingPayload) { bMsg.textContent = 'pick an image first'; return; }
+    const body = pendingPayload;
+    bBtn.disabled = true; bMsg.className = '';
+    bMsg.textContent = `uploading ${body.length} bytes…`;
+    bProg.hidden = false; bProg.value = 0;
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/boot_logo');
+    xhr.setRequestHeader('content-type', 'image/jpeg');
+    xhr.upload.onprogress = e => { if (e.lengthComputable) bProg.value = Math.round(100*e.loaded/e.total); };
+    xhr.onload = () => {
+      bBtn.disabled = false;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        bMsg.textContent = 'persisted — power-cycle the AKP to see the new boot logo'; bMsg.className = 'ok';
+      } else {
+        bMsg.textContent = 'upload failed: ' + xhr.responseText; bMsg.className = 'err';
+      }
+    };
+    xhr.onerror = () => { bMsg.textContent = 'network error'; bBtn.disabled = false; };
+    xhr.send(body);
+  };
+  m.append(blo);
+}
+
+(async function start() { await pollState(); navigate(); })();
 </script>
 </body>
 </html>

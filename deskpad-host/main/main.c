@@ -1,13 +1,21 @@
 #include "akp03e.h"
 #include "actions.h"
-#include "clock_key.h"
+#include "bulb_render.h"
+#include "clock_render.h"
 #include "config.h"
 #include "ddc.h"
+#include "ha_discovery.h"
+#include "hid_link.h"
 #include "http_server.h"
 #include "key_anim.h"
+#include "kvm_detect.h"
 #include "live_key.h"
 #include "monitor_render.h"
+#include "mqtt.h"
 #include "network.h"
+#include "notify.h"
+#include "secrets.h"
+#include "system_status.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_timer.h"
@@ -89,7 +97,7 @@ static void on_akp_event(const akp03e_event_t *ev, void *user)
         break;
     case AKP03E_EVT_CONNECTED:
         ESP_LOGI(TAG, "akp03e connected, setting brightness, pushing images");
-        akp03e_set_brightness(70);
+        akp03e_set_brightness(actions_brightness_get());
         akp03e_clear_all_keys();
         key_anim_set_page(0);
         break;
@@ -122,7 +130,9 @@ void app_main(void)
     xTaskCreatePinnedToCore(usb_host_lib_task, "usb_lib", 4096, self, 5, NULL, 0);
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    ESP_ERROR_CHECK(config_init());  // loads NVS-backed bindings (stamps defaults on first boot)
+    ESP_ERROR_CHECK(system_status_init());  // first — everything else reports into it
+    ESP_ERROR_CHECK(config_init());   // loads NVS-backed bindings (stamps defaults on first boot)
+    ESP_ERROR_CHECK(secrets_init());  // loads MQTT creds from separate NVS key
 
     // AKP USB client must register BEFORE network_init runs. network_init
     // takes ~2.5 s for PHY bring-up; if it ran first, the AKP would
@@ -130,13 +140,14 @@ void app_main(void)
     // listening, the NEW_DEV event would be discarded, and the device
     // would silently stay un-enumerated until the user replugged it.
     ddc_init();   // failures are logged inside; missing monitors don't block boot
+    ESP_ERROR_CHECK(hid_link_init(-1, -1));   // UART1 on default pins (TX=GPIO8 RX=GPIO9)
     ESP_ERROR_CHECK(key_anim_init());
     ESP_ERROR_CHECK(actions_init());
 
     lv_init();
     lv_tick_set_cb(lv_tick_ms);
     ESP_ERROR_CHECK(live_key_init());
-    ESP_ERROR_CHECK(clock_key_init());
+    ESP_ERROR_CHECK(clock_render_init());
     ESP_ERROR_CHECK(monitor_render_init());   // binds REND_MONITOR slots
 
     ESP_ERROR_CHECK(akp03e_init(on_akp_event, NULL));
@@ -146,6 +157,11 @@ void app_main(void)
     // that's listening.
     ESP_ERROR_CHECK(network_init()); // wired Ethernet + mDNS; non-blocking
     ESP_ERROR_CHECK(http_server_start());
+    ESP_ERROR_CHECK(kvm_detect_init());
+    ESP_ERROR_CHECK(mqtt_init());             // connects if secrets.mqtt_host configured
+    ESP_ERROR_CHECK(bulb_render_init());      // binds REND_BULB slots + MQTT subscriptions
+    ESP_ERROR_CHECK(ha_discovery_init());     // HA MQTT discovery + state publishing
+    ESP_ERROR_CHECK(notify_init());           // MQTT-triggered overlays
 
     ESP_LOGI(TAG, "ready, waiting for device");
 }

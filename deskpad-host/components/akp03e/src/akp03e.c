@@ -2,6 +2,8 @@
 
 #include "esp_check.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include <string.h>
 
@@ -112,6 +114,39 @@ esp_err_t akp03e_set_key_jpeg(uint8_t lcd_key, const uint8_t *jpeg, size_t len)
     const uint8_t stp[] = { AKP03E_OUT_MAGIC_0, AKP03E_OUT_MAGIC_1, AKP03E_OUT_MAGIC_2,
                             0x00, 0x00, 'S', 'T', 'P' };
     return akp03e_send_out(stp, sizeof(stp));
+}
+
+esp_err_t akp03e_set_boot_logo(const uint8_t *jpeg, size_t len)
+{
+    if (!g_akp.attached) return ESP_ERR_INVALID_STATE;
+    if (!jpeg || len == 0 || len > 0xFFFF) return ESP_ERR_INVALID_ARG;
+    ensure_initialized_once();
+
+    // LOG announce: "LOG" + 0x00 0x00 + big-endian u16 length.
+    const uint8_t log_pkt[] = {
+        AKP03E_OUT_MAGIC_0, AKP03E_OUT_MAGIC_1, AKP03E_OUT_MAGIC_2,
+        0x00, 0x00, 'L', 'O', 'G',
+        0x00, 0x00,
+        (uint8_t)(len >> 8), (uint8_t)(len & 0xFF),
+    };
+    ESP_RETURN_ON_ERROR(akp03e_send_out(log_pkt, sizeof(log_pkt)), TAG, "LOG announce");
+
+    // Flush before streaming the image data — opposite of BAT/key-image
+    // ordering. (See ajazz-sdk set_logo_image.)
+    const uint8_t stp[] = {
+        AKP03E_OUT_MAGIC_0, AKP03E_OUT_MAGIC_1, AKP03E_OUT_MAGIC_2,
+        0x00, 0x00, 'S', 'T', 'P',
+    };
+    ESP_RETURN_ON_ERROR(akp03e_send_out(stp, sizeof(stp)), TAG, "STP flush");
+
+    size_t off = 0;
+    while (off < len) {
+        size_t chunk = len - off;
+        if (chunk > AKP03E_PACKET_SIZE) chunk = AKP03E_PACKET_SIZE;
+        ESP_RETURN_ON_ERROR(akp03e_send_out(jpeg + off, chunk), TAG, "logo chunk");
+        off += chunk;
+    }
+    return ESP_OK;
 }
 
 esp_err_t akp03e_sleep(void)

@@ -501,7 +501,13 @@ static void build_defaults(config_t *out)
     out->pages[2].slots[2] = default_hid_chord("win+shift+s",   "Screenshot");
     out->pages[2].slots[3] = default_hid_chord("win+alt+r",     "Record");
     out->pages[2].slots[4] = default_static("dnd.jpg",          "DND");
-    out->pages[2].slots[5] = default_static("calc.jpg",         "Calc");
+    // Slot 5 of page 2 is a clock by default — matches the pre-Phase-4b
+    // hardcoded clock position so fresh-flashed devices still show a clock.
+    {
+        slot_config_t s = { .scope = SCOPE_GLOBAL, .renderer = REND_CLOCK };
+        s.display.label = strdup_or_null("Clock");
+        out->pages[2].slots[5] = s;
+    }
 
     // Encoder defaults — same binding across all pages.
     for (int p = 0; p < KEY_ANIM_PAGE_COUNT; p++) {

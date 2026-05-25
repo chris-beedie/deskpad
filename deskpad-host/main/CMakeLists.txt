@@ -24,8 +24,11 @@ if(NOT _pil_check EQUAL 0)
     execute_process(COMMAND "${python}" -m pip install --quiet pillow)
 endif()
 
+# Generate into the build tree, not the source tree, so the artifacts don't
+# pollute the repo. EMBED_FILES accepts absolute paths.
+set(KEYIMAGES_DIR "${CMAKE_CURRENT_BINARY_DIR}/keyimages")
 execute_process(
-    COMMAND "${python}" "${GEN_SCRIPT}"
+    COMMAND "${python}" "${GEN_SCRIPT}" "${KEYIMAGES_DIR}"
     RESULT_VARIABLE _gen_result
     OUTPUT_VARIABLE _gen_output ERROR_VARIABLE _gen_output)
 if(NOT _gen_result EQUAL 0)
@@ -37,17 +40,28 @@ set(KEYIMAGES "")
 foreach(page RANGE 0 2)
     foreach(key RANGE 0 5)
         list(APPEND KEYIMAGES
-            "keyimages/page${page}_key${key}.jpg"
-            "keyimages/page${page}_key${key}_pressed.jpg")
+            "${KEYIMAGES_DIR}/page${page}_key${key}.jpg"
+            "${KEYIMAGES_DIR}/page${page}_key${key}_pressed.jpg")
     endforeach()
 endforeach()
 
 idf_component_register(
-    SRCS "http_server.c" "network.c" "config.c" "main.c" "actions.c" "ddc.c" "key_anim.c"
-         "jpeg_enc.c" "live_key.c" "clock_key.c" "host_state.c" "monitor_render.c"
-    INCLUDE_DIRS "."
+    SRCS
+        # core
+        "main.c" "actions.c" "config.c" "host_state.c" "secrets.c" "system_status.c"
+        "notify.c"
+        # ddc/
+        "ddc/ddc.c" "ddc/kvm_detect.c"
+        # hid/
+        "hid/hid_link.c" "hid/hid_keys.c"
+        # net/
+        "net/network.c" "net/http_server.c" "net/mqtt.c" "net/ha_discovery.c"
+        # renderers/
+        "renderers/key_anim.c" "renderers/live_key.c" "renderers/jpeg_enc.c"
+        "renderers/clock_render.c" "renderers/monitor_render.c" "renderers/bulb_render.c"
+    INCLUDE_DIRS "." "ddc" "hid" "net" "renderers"
     REQUIRES driver usb akp03e esp_driver_i2c esp_driver_jpeg
-             esp_timer lvgl nvs_flash json
+             esp_timer lvgl nvs_flash json mqtt
              esp_eth esp_netif esp_event esp_http_server app_update
     EMBED_FILES ${KEYIMAGES} "spa_index.html"
 )

@@ -1,9 +1,18 @@
 #include "actions.h"
+#include "akp03e.h"
 #include "config.h"
 #include "ddc.h"
+#include "ha_discovery.h"
+#include "hid_keys.h"
+#include "hid_link.h"
 #include "host_state.h"
 #include "key_anim.h"
+#include "mqtt.h"
+#include "notify.h"
 #include "esp_log.h"
+#include "nvs.h"
+
+#include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -94,12 +103,12 @@ static const char *resolve_ha_entity(const slot_config_t *slot, const binding_t 
 {
     if (b->ha_entity && *b->ha_entity) return b->ha_entity;
     if (slot && slot->entity && *slot->entity) return slot->entity;
-    return "(none)";
+    return NULL;
 }
 
-// Dispatch a binding. `slot` may be NULL for encoder bindings (they have no
-// shared entity / scope context).
-static void exec_binding(const binding_t *b, const slot_config_t *slot)
+// Dispatch a binding. `slot` may be NULL for encoder bindings or API-
+// triggered actions (which carry full binding info on `b`).
+void actions_fire(const binding_t *b, const slot_config_t *slot)
 {
     switch (b->type) {
     case BIND_NONE:
@@ -115,20 +124,47 @@ static void exec_binding(const binding_t *b, const slot_config_t *slot)
         ESP_LOGI(TAG, "ddc bus=%d vcp=0x%02x variant=%d", b->ddc_bus, b->ddc_vcp, (int)b->ddc_variant);
         exec_ddc(b);
         return;
-    case BIND_HID_CHORD:
-        ESP_LOGI(TAG, "hid chord '%s'%s [Phase 5]",
-                 b->hid_chord ? b->hid_chord : "(none)",
-                 b->hid_hold ? " (hold)" : "");
+    case BIND_HID_CHORD: {
+        if (!b->hid_chord || !*b->hid_chord) { ESP_LOGW(TAG, "hid_chord: empty"); return; }
+        uint8_t mods = 0, key = 0;
+        if (!hid_keys_parse_chord(b->hid_chord, &mods, &key)) {
+            ESP_LOGW(TAG, "hid_chord: unrecognised chord '%s'", b->hid_chord);
+            return;
+        }
+        ESP_LOGI(TAG, "hid chord '%s' -> mods=0x%02x key=0x%02x",
+                 b->hid_chord, mods, key);
+        if (b->hid_hold) ESP_LOGW(TAG, "hid_chord: hold-style not implemented; tapping");
+        hid_link_send_chord_tap(mods, key);
         return;
-    case BIND_HID_CONSUMER:
-        ESP_LOGI(TAG, "hid consumer '%s' [Phase 5]",
-                 b->hid_consumer ? b->hid_consumer : "(none)");
+    }
+    case BIND_HID_CONSUMER: {
+        if (!b->hid_consumer) { ESP_LOGW(TAG, "hid_consumer: empty"); return; }
+        uint16_t usage = hid_keys_consumer_code(b->hid_consumer);
+        if (!usage) {
+            ESP_LOGW(TAG, "hid_consumer: unknown '%s'", b->hid_consumer);
+            return;
+        }
+        ESP_LOGI(TAG, "hid consumer '%s' -> 0x%04x", b->hid_consumer, usage);
+        hid_link_send_consumer_tap(usage);
         return;
-    case BIND_HA:
-        ESP_LOGI(TAG, "ha service '%s' on '%s' [Phase 7]",
-                 b->ha_service ? b->ha_service : "(none)",
-                 resolve_ha_entity(slot, b));
+    }
+    case BIND_HA: {
+        const char *entity = resolve_ha_entity(slot, b);
+        if (!b->ha_service || !*b->ha_service || !entity) {
+            ESP_LOGW(TAG, "ha: missing service or entity");
+            return;
+        }
+        // Publish as a single intent on deskpad/cmd; user's HA automation
+        // dispatches to the matching service call.
+        char payload[192];
+        snprintf(payload, sizeof(payload),
+                 "{\"service\":\"%s\",\"entity\":\"%s\"}",
+                 b->ha_service, entity);
+        ESP_LOGI(TAG, "ha -> %s", payload);
+        esp_err_t err = mqtt_publish("deskpad/cmd", payload, false);
+        if (err != ESP_OK) ESP_LOGW(TAG, "mqtt_publish: %s", esp_err_to_name(err));
         return;
+    }
     }
 }
 
@@ -161,6 +197,7 @@ static void dispatch_event(const action_event_t *ev)
     switch (ev->kind) {
     case EV_SLOT_PRESS: {
         if (ev->index >= KEY_ANIM_KEY_COUNT) return;
+        if (notify_consume_press(ev->index)) return;   // press dismissed a notification; don't fire binding
         const slot_config_t *slot = &cfg->pages[ev->page].slots[ev->index];
         host_t active = host_state_get_active();
         if (!scope_active(slot->scope, active)) {
@@ -168,12 +205,12 @@ static void dispatch_event(const action_event_t *ev)
                      ev->page, ev->index, scope_name(slot->scope), host_label(active));
             return;
         }
-        exec_binding(&slot->binding, slot);
+        actions_fire(&slot->binding, slot);
         return;
     }
     case EV_ENCODER_PRESS: {
         if (ev->index >= AKP03E_ENCODER_COUNT) return;
-        exec_binding(&cfg->encoders[ev->index].pages[ev->page].press, NULL);
+        actions_fire(&cfg->encoders[ev->index].pages[ev->page].press, NULL);
         return;
     }
     case EV_ENCODER_TWIST: {
@@ -181,7 +218,7 @@ static void dispatch_event(const action_event_t *ev)
         const binding_t *b = (ev->twist > 0)
                              ? &cfg->encoders[ev->index].pages[ev->page].twist_pos
                              : &cfg->encoders[ev->index].pages[ev->page].twist_neg;
-        exec_binding(b, NULL);
+        actions_fire(b, NULL);
         return;
     }
     case EV_PAGE_SWITCH:
@@ -196,6 +233,36 @@ static void actions_worker(void *arg)
     for (;;) {
         if (xQueueReceive(s_q, &ev, portMAX_DELAY) == pdTRUE) dispatch_event(&ev);
     }
+}
+
+// ---------------------------------------------------------------------------
+// AKP brightness (NVS-persisted)
+
+#define NVS_NAMESPACE     "deskpad"
+#define NVS_KEY_BRIGHT    "akp_bright"
+#define BRIGHT_DEFAULT    70
+
+uint8_t actions_brightness_get(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &h) != ESP_OK) return BRIGHT_DEFAULT;
+    uint8_t v = BRIGHT_DEFAULT;
+    nvs_get_u8(h, NVS_KEY_BRIGHT, &v);
+    nvs_close(h);
+    return v;
+}
+
+void actions_brightness_set(uint8_t percent)
+{
+    if (percent > 100) percent = 100;
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u8(h, NVS_KEY_BRIGHT, percent);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+    // Best-effort push to the AKP — ignored if not yet attached.
+    akp03e_set_brightness(percent);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,6 +288,7 @@ void actions_handle(const akp03e_event_t *ev)
         if (ev->index < KEY_ANIM_KEY_COUNT) {
             out.kind = EV_SLOT_PRESS;
             out.index = ev->index;
+            ha_publish_press_slot(out.page, out.index);
             break;
         }
         // Side keys 6/7/8: hard-wired page switchers. Routed through the
@@ -229,6 +297,7 @@ void actions_handle(const akp03e_event_t *ev)
         if (ev->index >= 6 && ev->index <= 8) {
             out.kind  = EV_PAGE_SWITCH;
             out.index = ev->index - 6;
+            ha_publish_press_side(out.index);
             break;
         }
         return;
@@ -236,11 +305,13 @@ void actions_handle(const akp03e_event_t *ev)
         if (!ev->pressed) return;
         out.kind  = EV_ENCODER_PRESS;
         out.index = ev->index;
+        ha_publish_press_encoder(out.index);
         break;
     case AKP03E_EVT_ENCODER_TWIST:
         out.kind  = EV_ENCODER_TWIST;
         out.index = ev->index;
         out.twist = ev->twist;
+        ha_publish_twist_encoder(out.index, out.twist);
         break;
     default:
         return;

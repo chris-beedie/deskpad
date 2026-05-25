@@ -1,206 +1,140 @@
-# KVM Switcher
+# deskpad
 
-A two-board DIY KVM that swaps two monitors (DDC/CI) and a keyboard between
-two host computers, with WiFi + Web UI + Home Assistant integration.
+A desk control surface that coordinates a workstation centred on a single
+KVM-capable monitor. Six LCD-backed buttons + three rotary encoders for
+switching hosts, controlling Home Assistant, displaying live status, and
+sending HID input to whichever host is currently active.
 
 ```
-                          USB keyboard
-                               │
-                               │ USB-A → USB-C OTG adapter
-                               ▼
-                         ┌──────────────────────┐
-                         │  kvm-switcher-       │
-                         │  control             │     I2C (level-shifted)
-                         │  (Xiao ESP32-S3)     ├───► Monitor A (DDC/CI)
-                         │                      │
-                         │  · USB host (OTG)    ├───► Monitor B (DDC/CI)
-                         │  · WiFi / Web UI     │
-                         │  · MQTT (HA disco.)  │
-                         │  · Hotkey filter     │
-                         └─────┬─────────┬──────┘
-                               │ UART    ▲ 5V / GND
-                               │ link    │ (RP2350 → ESP32)
-                               ▼         │
-                         ┌─────┴─────────┴──────┐
-                         │  kvm-switcher-hid    │
-              USB-C      │  (Xiao RP2350)       │
-       Host ◄────────────┤  · USB HID kbd       │
-       (PC, hub,         │  · USB HID consumer  │
-        or dock)         │  · USB-CDC (debug)   │
-                         └──────────────────────┘
+                              ┌───────────────────────────┐
+                              │   Ajazz AKP03E LCD pad    │   ← user
+                              │   6 keys + 3 encoders     │
+                              └────────────┬──────────────┘
+                                           │ USB host
+                              ┌────────────┴──────────────┐
+                              │   ESP32-P4-NANO           │   ← deskpad-host
+                              │  (Waveshare board)        │
+                              │  · DDC/CI to U38 + U24    │──→ U3823DW (KVM)
+                              │  · Ethernet + Web UI      │──→ U2419H (secondary)
+                              │  · MQTT (HA + discovery)  │
+                              │  · UART link ↓            │
+                              └───────────┬───────────────┘
+                                          │ UART 1 Mbps
+                              ┌───────────┴───────────────┐
+                              │   Xiao RP2350             │   ← deskpad-hid
+       USB-C                  │  · HID keyboard           │
+   to active host  ◄──────────┤  · HID consumer-control   │
+   (via U38 hub)              │  · USB-CDC log surface    │
+                              └───────────────────────────┘
 ```
+
+## Architecture in one minute
+
+- **The U38 is the KVM.** Its built-in USB hub routes the keyboard/mouse/
+  peripherals between hosts when its DisplayPort/USB-C input changes.
+  deskpad doesn't move USB; it tells the U38 what to do over DDC/CI.
+- **deskpad coordinates the desk.** Reacts to U38 input changes (so the
+  secondary monitor follows), exposes the AKP03E keys as a Stream-Deck-
+  style surface, and integrates with Home Assistant via MQTT.
+- **The HID bridge** (RP2350) is how deskpad sends keystrokes to whichever
+  host the U38 has selected — it sits on the U38's USB hub like any
+  other peripheral and gets re-attached automatically on switch.
+
+See [CONTEXT.md](CONTEXT.md) for the full glossary and
+[docs/adr/](docs/adr/) for architectural decisions.
 
 ## Repository layout
 
 | Folder | Board | Role |
 |---|---|---|
-| [kvm-switcher-control/](kvm-switcher-control/) | Seeed Xiao ESP32-S3 | USB host for the keyboard, monitor switching, web/MQTT control |
-| [kvm-switcher-hid/](kvm-switcher-hid/) | Seeed Xiao RP2350 | USB device to the PC: HID keyboard + consumer-control + CDC log |
+| [deskpad-host/](deskpad-host/) | Waveshare ESP32-P4-NANO | Main firmware — AKP driver, DDC, web UI, MQTT, HA integration |
+| [deskpad-hid/](deskpad-hid/)   | Seeed Xiao RP2350       | USB-HID bridge — receives reports over UART, emits to active host |
+
+## Features
+
+- **KVM coordination.** Switch U38 input via DDC; secondary monitor (U24)
+  follows. Detects external switches via RP2350 USB re-enumeration + a
+  slow DDC poll fallback.
+- **Configurable bindings.** Each of three pages × six LCD keys has a
+  renderer (static JPEG, clock, bulb, monitor, thermostat, text value)
+  and a binding (KVM select/toggle, HID chord/consumer-control, HA
+  service call, raw DDC write).
+- **Hybrid scope.** Bindings can be `global` (rendered on every Host)
+  or `host:PC1` / `host:PC2` (rendered only when that host is active).
+- **State-reactive renderers.** Monitor icon brightens to indicate the
+  active Host. Bulb renderer reflects HA entity state subscribed via
+  MQTT. (More renderers will come live as MQTT topics are wired up.)
+- **Home Assistant integration.** MQTT discovery publishes deskpad as
+  an HA device with sensors (active host, current page, link/USB/DDC
+  health). Every button press publishes an event topic for HA
+  automations. Service-call dispatch via a single `deskpad/cmd` intent
+  topic + one HA automation.
+- **Notifications.** MQTT-triggered overlays on the AKP — doorbell,
+  motion, etc. — with takeover or single-slot styles and configurable
+  dismissal.
+- **Web UI.** Self-contained SPA at `http://deskpad.local/` for editing
+  bindings, encoders, KVM topology, notifications, and credentials,
+  plus a dashboard and OTA upload.
+- **Public HTTP API.** Every UI action is also a stable JSON endpoint;
+  see [docs/api.md](docs/api.md).
 
 ## Wiring
 
-| Signal | Xiao ESP32-S3 | Xiao RP2350 |
+### deskpad-host (ESP32-P4-NANO)
+
+| Signal | GPIO | To |
 |---|---|---|
-| Link UART TX | D6 (GPIO43) | D7 (GP1) — RX |
-| Link UART RX | D7 (GPIO44) | D6 (GP0) — TX |
-| ESP32 hardware reset | RST pad (back of board, near USB-C) | D5 (GP7) |
-| 5V rail | 5V (input) | 5V/VBUS (output) |
-| Ground | GND | GND |
+| DDC/CI bus A (SDA/SCL) | 4 / 5 | U3823DW (level shifter required) |
+| DDC/CI bus B (SDA/SCL) | 6 / 7 | U2419H |
+| UART1 TX (to RP2350 RX) | 8 | RP2350 D7 (GP1) |
+| UART1 RX (from RP2350 TX) | 9 | RP2350 D6 (GP0) |
+| Ethernet RMII (auto) | (board) | RJ45 jack onboard |
+| AKP03E USB host | (USB-C) | AKP03E via USB-A→USB-C adapter |
 
-The **ESP32 hardware reset** wire is required for OTA updates to recover the
-keyboard cleanly. After flashing, the firmware asks the RP2350 to briefly
-drive this line low, hardware-resetting the ESP32. This is the only reliable
-way to reset the USB-OTG analog PHY — without it, an OTA-triggered software
-reset leaves the keyboard in a stale enumerated state and you have to
-physically replug it. The line is held high-Z by the RP2350 except during
-the ~20 ms reset pulse, so the ESP32's RESET button still works normally.
+Common GND between P4 and RP2350 is mandatory.
 
-Plus on the ESP32-S3 only:
+### deskpad-hid (Xiao RP2350)
 
-| Function | Pin |
-|---|---|
-| I2C SDA / SCL → Monitor A (Wire) | D0 / D1 (GPIO1 / GPIO2) |
-| I2C SDA / SCL → Monitor B (Wire1) | D2 / D3 (GPIO3 / GPIO4) |
-| KVM input button (to GND) | D4 (GPIO5) |
-| Status NeoPixel | D5 (GPIO6) |
-| Debug button | BOOT (GPIO0) |
-| USB host (D+/D-) | USB-C (GPIO19/20) |
-
-## Power topology
-
-```
-                     5V                  5V (5V pin →           5V (USB-C VBUS,
-                  via VBUS               5V pin, wired)         host mode)
-Host USB-C  ───────────────►  RP2350  ──────────────────►  ESP32-S3  ──────────────►  Keyboard
-(PC, hub,                                                                           (USB-A via OTG
- or dock)                                                                            adapter)
-```
-
-The "Host USB-C" upstream of the RP2350 is whatever provides 5V + USB data —
-a PC port, a powered hub, or a docking station all work. A direct USB 2.0 PC
-port (500 mA) is enough on paper for RP2350 (~30 mA) + ESP32-S3 (~150 mA peak
-with WiFi) + a typical wired keyboard (~50 mA), but a powered hub or dock
-gives you headroom and keeps the device powered when the host PC is off,
-which is convenient for the captive-portal / always-on Web UI use case.
-
-**Don't have both boards plugged into separate USB-C cables while the 5V
-rail between them is wired** — pull one host cable before joining 5V.
-
-## USB host on the ESP32-S3
-
-The Xiao ESP32-S3's USB-C is wired as a device (Rd pull-downs on CC). To use
-it as a host, plug in a **USB-C → USB-A OTG adapter** and then a USB-A
-keyboard. A plain USB-C-to-USB-C cable will not enumerate.
-
-## Inter-board protocol
-
-UART, 1 000 000 baud, 8N1, full-duplex, simple framed packets:
-
-```
-0xAB | type | len | payload[len] | xor(type, len, payload)
-```
-
-| Type | Direction | Payload |
+| Signal | GPIO | To |
 |---|---|---|
-| `0x01` KEYBOARD | ESP32 → RP2350 | 8-byte boot keyboard report |
-| `0x02` CONSUMER | ESP32 → RP2350 | 2-byte LE consumer-control usage code |
-| `0x10` LOG | ESP32 → RP2350 | UTF-8 log line (≤ 220 bytes) |
-| `0x20` USB_STATUS | RP2350 → ESP32 | 1 byte: bit0 mounted, bit1 suspended |
-| `0x21` HEARTBEAT | RP2350 → ESP32 | empty — sent every 1 s |
-
-The ESP32 considers the link **down** if no heartbeat arrives for 3 s. Link
-state is exposed via the Web UI status JSON (`hid_link_up`, `usb_mounted`,
-`usb_suspended`) and republished over MQTT on every transition.
+| UART0 TX (D6 / GP0) | 0 | P4 GPIO 9 |
+| UART0 RX (D7 / GP1) | 1 | P4 GPIO 8 |
+| USB-C (device) | — | Active host (via U38's USB hub) |
 
 ## First-time bring-up
 
-1. **Flash each board in isolation** (own USB-C cable to your computer).
-2. **RP2350 first flash**: hold `BOOTSEL` while plugging in → mounts as a UF2
-   drive. Run `pio run -e xiao_rp2350 -t upload`. After this initial flash
-   subsequent uploads use the TinyUSB reset interface — no button press.
-3. **ESP32-S3 first flash**: hold `BOOT`, tap `RESET`, release `BOOT` →
-   ROM bootloader. Run `pio run -e xiao_esp32s3 -t upload`. Subsequent
-   uploads trigger the bootloader automatically.
-4. **Verify RP2350 stand-alone**: opens as `KVM HID Bridge` in your OS, with
-   both an HID keyboard and a CDC serial port. The CDC port should print
-   `[USB] mounted=1 suspended=0` on connect. NeoPixel will be solid red
-   (no link heartbeat — expected when stand-alone).
-5. **Verify ESP32-S3 stand-alone**: on first boot the device has no stored
-   credentials and starts an open AP `KVM-Switcher-Setup` (LED solid blue).
-   Connect to it from a phone, the captive portal pops up at
-   `http://192.168.4.1`, pick your WiFi and (optionally) enter MQTT host /
-   port / user / pass, then save. The device reboots, joins your WiFi, and
-   the Web UI is reachable at `http://kvm-switcher.local/`. Logs appear
-   over the link UART (1 Mbps on D6/D7), so to see them stand-alone you
-   need a USB-UART adapter on those pins or to pair it with the RP2350
-   first.
-6. **Wire the link**: cross TX↔RX, common GND, then add the 5V rail with
-   only one of the boards plugged into a USB host. Logs from the ESP32
-   now stream out the RP2350's USB-CDC port, prefixed `[ESP] …`.
-
-## Building
-
-```bash
-cd kvm-switcher-control && pio run -t upload   # ESP32-S3
-cd kvm-switcher-hid     && pio run -t upload   # RP2350
-```
+1. **Flash deskpad-host:** open `deskpad-host/` in the ESP-IDF VS Code
+   extension. Set target `esp32p4`. Build + flash.
+2. **Flash deskpad-hid:** open `deskpad-hid/` in PlatformIO. Build +
+   upload (hold BOOTSEL on first flash; UF2 reset thereafter).
+3. **Plug in Ethernet.** Console should print `network: got IP …` and
+   `mqtt: no broker configured` (expected first boot).
+4. **Browse to `http://deskpad.local/`** — the dashboard shows current
+   state and lets you configure pages, credentials, notifications, and
+   firmware OTA.
+5. **Configure MQTT** in the Credentials tab if you want HA integration.
+6. **Edit pages 0-2** to bind keys to KVM toggles, HA services, HID
+   chords, etc.
 
 ## Configuration
 
-There is no source-tree config file — credentials live in NVS on the device.
+NVS-backed JSON. Stamped with defaults on first boot. See the schema
+preview at [docs/config-sample.yaml](docs/config-sample.yaml).
 
-**First boot / no stored WiFi:** the ESP32 comes up as an open AP
-`KVM-Switcher-Setup` with a captive portal at `http://192.168.4.1`. The portal
-form takes the WiFi SSID + password and (optionally) MQTT host / port / user /
-password. Save and the device reboots into station mode. The status LED is
-solid blue while the portal is active.
+Secrets (MQTT host/user/password) live in a separate NVS key and are
+never serialised to the main config. Edit via the Credentials tab.
 
-**Once joined:** everything else is editable from the Web UI under the
-*MQTT settings* and *Hotkey settings* drop-downs, and persisted in NVS.
+## Architectural decisions
 
-**Forgetting WiFi (e.g. moving to a new network):** either click **Forget WiFi
-& reboot** in the *WiFi* drop-down on the Web UI, or **hold the KVM input
-button for 10 seconds** (LED previews red at 3 s = reboot, purple at 10 s =
-factory reset; release inside the colour you want). This wipes WiFi creds
-and MQTT settings, then reboots into the captive portal.
+- [ADR-0001](docs/adr/0001-u38-is-the-kvm.md) — U38 is the KVM, deskpad coordinates it.
+- [ADR-0002](docs/adr/0002-host-is-kvm-slot-not-machine.md) — Hosts are KVM slots, not Machines.
+- [ADR-0003](docs/adr/0003-hybrid-binding-scope.md) — Hybrid binding scope (global vs host:<id>).
+- [ADR-0004](docs/adr/0004-ethernet-no-wifi.md) — Ethernet, not WiFi.
 
-## OTA updates (ESP32 only)
+## Roadmap
 
-The control board uses `default_8MB.csv` partitioning: two 3.3 MB OTA app
-slots plus a 1.4 MB SPIFFS region. ElegantOTA is mounted at `/update` by
-the AsyncWebServer.
-
-Upload a new firmware over the air:
-
-1. Build but don't flash: `pio run -e xiao_esp32s3` produces
-   `.pio/build/xiao_esp32s3/firmware.bin`.
-2. Browse to `http://kvm-switcher.local/update` (or the device's IP),
-   select **Firmware**, pick the `.bin`, and upload.
-3. The device verifies the image, swaps OTA slots, and reboots. On first
-   boot the new image must call `esp_ota_mark_app_valid_cancel_rollback()`
-   (already done in `setup()`); otherwise the bootloader rolls back.
-
-The RP2350 has no OTA — flash it via UF2 mode (hold BOOTSEL while
-plugging USB-C).
-
-### Re-flashing the ESP32 over USB (when OTA isn't an option)
-
-The ESP32 only has one USB-C port and it's normally hosting the keyboard.
-To USB-flash it once everything is wired up:
-
-1. **Unplug the keyboard's OTG adapter** from the ESP32's USB-C port — that
-   port is your upload cable port.
-2. **Unplug the RP2350's USB-C cable from your PC** (or cut the 5V tie
-   between the two boards). Otherwise both boards' VBUS rails are joined
-   while both USB-C cables go to PCs, which backfeeds one PC's USB into
-   the other.
-3. The UART link wires (D6 ↔ D7, GND) and the 5V tie can stay if the
-   RP2350 is unplugged from its host — the RP2350 will simply run from
-   the ESP32's USB power while you flash.
-4. **Enter download mode manually**: hold `BOOT`, tap `RESET`, release
-   `BOOT`. This is required after the first flash because
-   `ARDUINO_USB_MODE=0` (USB host mode) means the chip is *not* visible
-   as a serial device while the firmware runs — esptool can't trigger
-   the auto-reset.
-5. Run `pio run -e xiao_esp32s3 -t upload`.
-6. Tap `RESET` (or it'll restart automatically) to run the new firmware.
+See [plan.md](plan.md). Major phases through Phase 9 are landed in
+firmware; integration testing waits on the physical UART link and DDC
+wiring to be completed. Open polish work (live-rebind, press-animation
+for live renderers, image upload for static_jpeg, optional Web UI auth)
+is tracked there too.
